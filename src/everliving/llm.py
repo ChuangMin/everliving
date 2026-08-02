@@ -27,6 +27,24 @@ class LLMAuthError(RuntimeError):
     the SDK resolves credentials lazily, so a missing key looks fine until you call."""
 
 
+class LLMUnavailable(RuntimeError):
+    """The API couldn't serve the request — no credit, rate limited, outage, offline.
+
+    Rephrasing won't help, so callers should stop rather than retry. The server's own
+    message is carried through: it usually says exactly what to do.
+    """
+
+
+def _server_message(exc) -> str:
+    """The human-readable half of an API error, without the status-code noise."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            return str(error["message"])
+    return str(exc)
+
+
 def extract_text(blocks) -> str:
     """Join the text blocks of a response, skipping thinking and tool blocks.
 
@@ -84,8 +102,16 @@ class AnthropicLLMClient:
                 messages=[{"role": "user", "content": user_message}],
             )
         except self._anthropic.AuthenticationError as exc:
-            # A credential exists but the server rejected it (401).
+            # A credential exists but the server rejected it (401). Must precede
+            # APIStatusError below — it's a subclass.
             raise LLMAuthError(str(exc)) from exc
+        except self._anthropic.APIStatusError as exc:
+            # Billing, rate limits, server errors. The most common one in practice is
+            # an empty credit balance, which arrives as a 400 — not something the
+            # player can fix by rewording, so surface the server's text and stop.
+            raise LLMUnavailable(_server_message(exc)) from exc
+        except self._anthropic.APIConnectionError as exc:
+            raise LLMUnavailable(f"連不上 Anthropic API:{exc}") from exc
         except TypeError as exc:
             # No credential could be resolved at all — the SDK raises a plain TypeError
             # from header validation before any request goes out. Narrow by message so

@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-08-02 — 第一次真的打 API,又抓到一個錯誤路徑
+
+Agent: Claude Opus 5(互動 session)
+
+人類設好 key 後叫我試跑。用**另一個 scratch DB**(不動 `everliving.db`,免得污染他自己的 H-1)實際打了一次真實 API,結果:額度還沒入帳,回 400「credit balance is too low」——而程式直接吐一整串 traceback。
+
+又是同一類問題:**只有真的跑才會現形的錯誤路徑**。而且這一條的命中率極高,任何人第一次跑、還沒儲值就是這個畫面。
+
+- 新增 `LLMUnavailable`:涵蓋額度不足、rate limit、伺服器錯誤、連不上。這些**改講法沒有用**,所以 CLI 直接印訊息並退出,不做重試迴圈(單人週末工具,重試迴圈是過度設計)。
+- 從 `exc.body["error"]["message"]` 取伺服器原文——它通常已經寫清楚該怎麼辦(「go to Plans & Billing」),比我自己重寫一段有用。
+- **例外攔截順序有陷阱**:`AuthenticationError` 是 `APIStatusError` 的子類別,必須先攔。有測試專門守這點。
+
+測試 68 passed(新增 5 個 SDK 例外對應 + 1 個 CLI 端對端)。實際重跑確認:現在額度不足會印出乾淨的兩行提示,不是 traceback。
+
+**目前已知的三種失敗都收斂了**:沒憑證 / 憑證被拒 → `LLMAuthError`;額度、限流、斷線 → `LLMUnavailable`;模型婉拒 → `LLMRefusal`(唯一可以繼續玩的一種)。
+
+**下一步**:等額度入帳,H-1 playtest(人類)。
+
+**待人決定**:儲值入帳後跑 H-1;舊 commit 的 history 重寫指令仍待執行。
+
+---
+
 ## 2026-08-02 — 真的跑一次,抓到兩個只有跑才會出現的 bug
 
 Agent: Claude Opus 5(互動 session)

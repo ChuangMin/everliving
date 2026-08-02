@@ -9,7 +9,7 @@ from datetime import timedelta
 from everliving import db, persona
 from everliving.agent_loop import respond
 from everliving.config import load_dotenv
-from everliving.llm import LLMAuthError, LLMRefusal
+from everliving.llm import LLMAuthError, LLMRefusal, LLMUnavailable
 from everliving.offline import simulate_offline_period, time_since_last_seen
 
 DB_PATH = "everliving.db"
@@ -47,6 +47,13 @@ def _print_cost_report(conn) -> None:
             f"{row['input_tokens']:>12}{row['output_tokens']:>12}"
         )
     print("\n(換算成金額請自行乘上當前各模型單價——單價會變,所以這裡只存 token 這個不會過期的事實)")
+
+
+def _exit_unavailable(exc) -> None:
+    """No credit, rate limited, or an outage — rewording won't help, so stop."""
+    print(f"\n沒辦法呼叫模型:{exc}")
+    print("(額度不足的話,到 console.anthropic.com 的 Plans & Billing 儲值。)")
+    sys.exit(1)
 
 
 def _exit_no_credentials(exc) -> None:
@@ -95,6 +102,8 @@ def main(argv: list[str] | None = None) -> None:
             result = simulate_offline_period(conn, agent_id, llm, elapsed)
         except LLMAuthError as exc:
             _exit_no_credentials(exc)
+        except LLMUnavailable as exc:
+            _exit_unavailable(exc)
         except LLMRefusal as exc:
             # Don't let this abort startup — the conversation loop is still usable.
             print(f"\n(這次沒能生成離線敘事:{exc})\n")
@@ -124,6 +133,8 @@ def main(argv: list[str] | None = None) -> None:
                 reply = respond(conn, agent_id, llm, player_message)
             except LLMAuthError as exc:
                 _exit_no_credentials(exc)
+            except LLMUnavailable as exc:
+                _exit_unavailable(exc)
             except LLMRefusal as exc:
                 print(f"({exc} 換個說法再試一次。)")
                 continue

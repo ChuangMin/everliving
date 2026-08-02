@@ -10,15 +10,29 @@ import types
 
 import pytest
 
-from everliving.llm import LLMAuthError
+from everliving.llm import LLMAuthError, LLMUnavailable
 
 NO_CREDS_MESSAGE = (
     "Could not resolve authentication method. Expected one of api_key, "
     "auth_token, or credentials to be set."
 )
+LOW_CREDIT_MESSAGE = (
+    "Your credit balance is too low to access the Anthropic API. "
+    "Please go to Plans & Billing to upgrade or purchase credits."
+)
 
 
-class _AuthenticationError(Exception):
+class _APIStatusError(Exception):
+    def __init__(self, message, body=None):
+        super().__init__(message)
+        self.body = body
+
+
+class _AuthenticationError(_APIStatusError):
+    """Mirrors the real SDK hierarchy — AuthenticationError subclasses APIStatusError."""
+
+
+class _APIConnectionError(Exception):
     pass
 
 
@@ -36,6 +50,8 @@ def _fake_anthropic(raises: Exception):
     module = types.ModuleType("anthropic")
     module.Anthropic = _Client
     module.AuthenticationError = _AuthenticationError
+    module.APIStatusError = _APIStatusError
+    module.APIConnectionError = _APIConnectionError
     return module
 
 
@@ -53,6 +69,37 @@ def test_unresolvable_credentials_typeerror_becomes_auth_error(monkeypatch):
 
 
 def test_rejected_credential_401_becomes_auth_error(monkeypatch):
+    client = _client(monkeypatch, _AuthenticationError("invalid x-api-key"))
+    with pytest.raises(LLMAuthError):
+        client.complete("sys", "hi")
+
+
+def test_low_credit_becomes_unavailable_with_the_server_message(monkeypatch):
+    """The most likely first-run failure — and the server text says exactly what to do."""
+    error = _APIStatusError(
+        "Error code: 400", body={"error": {"message": LOW_CREDIT_MESSAGE}}
+    )
+    client = _client(monkeypatch, error)
+    with pytest.raises(LLMUnavailable) as excinfo:
+        client.complete("sys", "hi")
+    assert "credit balance is too low" in str(excinfo.value)
+
+
+def test_status_error_without_a_body_falls_back_to_str(monkeypatch):
+    client = _client(monkeypatch, _APIStatusError("Error code: 529 overloaded"))
+    with pytest.raises(LLMUnavailable) as excinfo:
+        client.complete("sys", "hi")
+    assert "529" in str(excinfo.value)
+
+
+def test_connection_error_becomes_unavailable(monkeypatch):
+    client = _client(monkeypatch, _APIConnectionError("connection refused"))
+    with pytest.raises(LLMUnavailable):
+        client.complete("sys", "hi")
+
+
+def test_auth_error_wins_over_its_status_error_parent(monkeypatch):
+    """AuthenticationError subclasses APIStatusError; ordering decides which fires."""
     client = _client(monkeypatch, _AuthenticationError("invalid x-api-key"))
     with pytest.raises(LLMAuthError):
         client.complete("sys", "hi")
