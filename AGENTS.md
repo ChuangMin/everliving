@@ -34,6 +34,14 @@
 5. 任務做完把 `TASKS.md` 狀態改 `done`,在 `PROGRESS.md` 加一則新記錄(日期、用的是哪個 agent/模型、做了什麼、下一步、任何卡住的地方)
 6. 如果卡住需要人決定的問題,寫進 `PROGRESS.md` 的「待人決定」區塊,不要自己猜著往下做
 
+## 給 Claude Code 的補充(其他廠商工具略過即可)
+
+如果重複性工作值得固化成一個可重用的流程(例如「開發-驗證-記錄」的固定步驟、跑測試的固定方式),可以自行在 `.claude/skills/` 底下建立專案級 Skill(例如 `development`、`testing`),不用每次都重新描述一遍。建了就照 repo 慣例 commit 進去,讓下一個 Claude Code session 也能用。
+
+## commit 慣例
+
+不要加任何特定廠商的具名貢獻標記(例如 `Co-Authored-By: <某家模型>`)——這個 repo 是多廠商協作,commit 記錄保持廠商中立。
+
 ## 多 agent 併發安全(重要)
 
 會有其他 agent(可能是別家模型)同時或交錯在動這個 repo:
