@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from everliving import db
-from everliving.llm import LLMClient
+from everliving.llm import LLMClient, log_usage
 
 
 def time_since_last_seen(
@@ -65,5 +65,6 @@ def generate_offline_narrative(
     )
 
     narrative = llm.complete(system_prompt, user_message)
+    log_usage(conn, llm, agent_id, purpose="offline_narrative")
     db.add_memory_event(conn, agent_id, kind="offline_narrative", content=narrative)
     return narrative

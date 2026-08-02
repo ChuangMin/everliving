@@ -27,6 +27,16 @@ CREATE TABLE IF NOT EXISTS player_state (
     agent_id INTEGER PRIMARY KEY REFERENCES agents(id),
     last_seen_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS llm_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER REFERENCES agents(id),
+    purpose TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -99,3 +109,31 @@ def get_last_seen(conn: sqlite3.Connection, agent_id: int) -> str | None:
         "SELECT last_seen_at FROM player_state WHERE agent_id = ?", (agent_id,)
     ).fetchone()
     return row["last_seen_at"] if row else None
+
+
+def record_llm_call(
+    conn: sqlite3.Connection,
+    agent_id: int | None,
+    purpose: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> None:
+    """Log token usage so we can answer '每個玩家每天燒多少 API 錢' with real data."""
+    conn.execute(
+        "INSERT INTO llm_calls (agent_id, purpose, model, input_tokens, output_tokens, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (agent_id, purpose, model, input_tokens, output_tokens, _now()),
+    )
+    conn.commit()
+
+
+def token_usage_by_day(conn: sqlite3.Connection) -> list[dict]:
+    """Per-day, per-model token totals. Multiply by current per-token pricing yourself —
+    prices change, so we store the durable fact (tokens) rather than a stale dollar figure."""
+    rows = conn.execute(
+        "SELECT substr(created_at, 1, 10) AS day, model, COUNT(*) AS calls, "
+        "SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens "
+        "FROM llm_calls GROUP BY day, model ORDER BY day DESC, model"
+    ).fetchall()
+    return [dict(row) for row in rows]

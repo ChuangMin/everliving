@@ -30,7 +30,14 @@ python -m everliving.cli
 
 關掉再重開,第二次啟動時會先印出「這段時間發生的事」——這就是里程碑 0 要驗證的核心體驗。
 
+**不想真的等一天**:`python -m everliving.cli --offline-hours 24` 直接假裝你已經離開 24 小時,馬上生成該期間的敘事。playtest 一次搞定,不用隔夜。
+
+**看花了多少 token**:`python -m everliving.cli --cost-report` 印出每日用量(只存 token,不存金額——單價會變)。
+
 跑測試:`python -m pytest -q`(不需要 API key,LLM 呼叫在測試裡是 mock 的)。
+
+> 預設用最便宜的 Haiku,每次呼叫上限 512 tokens。要換模型設 `EVERLIVING_MODEL`。
+> 真正的成本保險請自己到 Anthropic Console 幫這把 key 設 spending limit。
 
 ## 給協作 Agent / For collaborating agents
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 
 from everliving import db
-from everliving.llm import LLMClient
+from everliving.llm import LLMClient, log_usage
 
 
 def build_system_prompt(agent: dict) -> str:
@@ -40,6 +40,7 @@ def respond(
     user_message = f"最近的記憶:\n{memory_text}\n\n玩家對你說:{player_message}"
 
     reply = llm.complete(system_prompt, user_message)
+    log_usage(conn, llm, agent_id, purpose="conversation")
 
     db.add_memory_event(conn, agent_id, kind="raw", content=f"玩家說:{player_message}")
     db.add_memory_event(conn, agent_id, kind="raw", content=f"我回答:{reply}")
