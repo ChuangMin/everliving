@@ -23,9 +23,13 @@ Out of scope (for now): world map, multiple agents, frontend, vector search.
 ## 執行 / Run it
 
 ```
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -e ".[dev]"
 python -m everliving.cli
 ```
+
+安裝一次就好(`-e` 是可編輯安裝,改程式碼不用重裝)。裝完之後 `python -m everliving.cli` 在任何資料夾都能跑。
+
+> ⚠️ `everliving.db` 會建在**你執行指令的那個資料夾**。想接續同一個世界,就固定在同一個資料夾跑——換位置等於開了一個全新的世界,agent 會什麼都不記得。
 
 API key 三選一(`.env` 已在 `.gitignore`,不會被 commit):
 

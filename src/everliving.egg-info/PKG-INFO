@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: everliving
+Version: 0.1.0
+Summary: A persistent world where your agent keeps living while you're offline
+Requires-Python: >=3.10
+Requires-Dist: anthropic
+Requires-Dist: openai
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"

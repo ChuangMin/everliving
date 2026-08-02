@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-08-02 — 修掉「README 寫的指令根本跑不起來」
+
+Agent: Claude Opus 5(互動 session)
+
+人類照 README 跑 `python -m everliving.cli`,得到 `ModuleNotFoundError: No module named 'everliving'`。
+
+原因:套件在 `src/everliving`,而 `pyproject.toml` 的 `pythonpath = ["src"]` **只對 pytest 生效**。所以 90 個測試全過,但實際指令一次都沒通過——**測試綠燈不等於使用者跑得起來**,這已經是這個專案第三次踩到同一類問題(前兩次是 `.env` 沒人讀、mock 掩蓋真實 SDK 契約)。
+
+- `pyproject.toml` 補上 `[build-system]` / `[project]`,宣告相依(anthropic、openai)與 `dev` extra,改用 `pip install -e ".[dev]"`。
+- 刪掉 `requirements.txt` / `requirements-dev.txt`——相依現在只有 pyproject 一個來源,免得兩邊漂移。
+- 加了 `everliving` console script(不過 Scripts 目錄不一定在 PATH 上,README 仍以 `python -m everliving.cli` 為主)。
+- pytest 保留 `pythonpath = ["src"]`,所以**測試不需要先安裝**就能跑,排程 agent 的流程不受影響。
+
+順手記了一個 footgun:`everliving.db` 建在**執行指令的當前資料夾**。裝成套件後可以從任何地方跑,換資料夾等於開一個全新世界、agent 什麼都不記得——已寫進 README 警告。
+
+驗證:從 repo 根目錄和從 `C:\Users\i8252` 各跑一次 `--help` 都正常,測試仍 90 passed。
+
+**下一步**:H-1 playtest(人類)。
+
+---
+
 ## 2026-08-02 — 接上 Groq,核心迴圈第一次用真模型跑通
 
 Agent: Claude Opus 5(互動 session)

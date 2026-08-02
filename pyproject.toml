@@ -1,3 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "everliving"
+version = "0.1.0"
+description = "A persistent world where your agent keeps living while you're offline"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic",
+    "openai",  # used for the OpenAI-compatible providers (Groq, xAI)
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+everliving = "everliving.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pytest.ini_options]
+# Tests run straight from the source tree, so they work without installing first.
 pythonpath = ["src"]
 testpaths = ["tests"]
