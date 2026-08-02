@@ -8,7 +8,7 @@ from datetime import timedelta
 
 from everliving import db, persona
 from everliving.agent_loop import respond
-from everliving.offline import generate_offline_narrative, time_since_last_seen
+from everliving.offline import simulate_offline_period, time_since_last_seen
 
 DB_PATH = "everliving.db"
 
@@ -76,9 +76,15 @@ def main(argv: list[str] | None = None) -> None:
         elapsed = time_since_last_seen(conn, agent_id)
 
     if elapsed is not None:
-        narrative = generate_offline_narrative(conn, agent_id, llm, elapsed)
+        result = simulate_offline_period(conn, agent_id, llm, elapsed)
         print(f"\n({agent['name']} 這段時間發生的事)")
-        print(narrative)
+        print(result.narrative)
+        if result.state_changes:
+            print("\n有些事情變了:")
+            for key, value in result.state_changes.items():
+                print(f"  · {key}:{value}")
+        if result.open_thread:
+            print(f"\n[ 有件事在等你 ] {result.open_thread}")
         print()
 
     print(f"你正在和 {agent['name']} 對話。輸入 exit 離開。")

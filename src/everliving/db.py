@@ -28,6 +28,27 @@ CREATE TABLE IF NOT EXISTS player_state (
     last_seen_at TEXT NOT NULL
 );
 
+-- What the agent currently has / is / feels. Offline periods change these, so the
+-- world is actually different when you come back rather than just described.
+CREATE TABLE IF NOT EXISTS agent_state (
+    agent_id INTEGER NOT NULL REFERENCES agents(id),
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (agent_id, key)
+);
+
+-- Unresolved situations that need the player. This is the hook that makes you
+-- want to come back: the agent is waiting on you for something.
+CREATE TABLE IF NOT EXISTS open_threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL REFERENCES agents(id),
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS llm_calls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id INTEGER REFERENCES agents(id),
@@ -109,6 +130,50 @@ def get_last_seen(conn: sqlite3.Connection, agent_id: int) -> str | None:
         "SELECT last_seen_at FROM player_state WHERE agent_id = ?", (agent_id,)
     ).fetchone()
     return row["last_seen_at"] if row else None
+
+
+def set_state(conn: sqlite3.Connection, agent_id: int, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO agent_state (agent_id, key, value, updated_at) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(agent_id, key) DO UPDATE SET value = excluded.value, "
+        "updated_at = excluded.updated_at",
+        (agent_id, key, value, _now()),
+    )
+    conn.commit()
+
+
+def get_state(conn: sqlite3.Connection, agent_id: int) -> dict[str, str]:
+    rows = conn.execute(
+        "SELECT key, value FROM agent_state WHERE agent_id = ? ORDER BY key", (agent_id,)
+    ).fetchall()
+    return {row["key"]: row["value"] for row in rows}
+
+
+def add_open_thread(conn: sqlite3.Connection, agent_id: int, description: str) -> int:
+    cur = conn.execute(
+        "INSERT INTO open_threads (agent_id, description, status, created_at) "
+        "VALUES (?, ?, 'open', ?)",
+        (agent_id, description, _now()),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_open_threads(conn: sqlite3.Connection, agent_id: int, limit: int = 3) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM open_threads WHERE agent_id = ? AND status = 'open' "
+        "ORDER BY created_at DESC LIMIT ?",
+        (agent_id, limit),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def resolve_thread(conn: sqlite3.Connection, thread_id: int) -> None:
+    conn.execute(
+        "UPDATE open_threads SET status = 'resolved', resolved_at = ? WHERE id = ?",
+        (_now(), thread_id),
+    )
+    conn.commit()
 
 
 def record_llm_call(

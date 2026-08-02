@@ -29,6 +29,12 @@ python -m everliving.cli
 ```
 
 關掉再重開,第二次啟動時會先印出「這段時間發生的事」——這就是里程碑 0 要驗證的核心體驗。
+離線期間不只是產生一段敘述:agent 的狀態會實際改變,而且通常會留下**一件在等你回應的事**。
+你回應之後,下一次離線期間會接著發展下去。
+
+Coming back isn't just reading a diary entry — the agent's state actually changed while you
+were gone, and it's usually waiting on you for something. Answer it, and the next offline
+period picks up from there.
 
 **不想真的等一天**:`python -m everliving.cli --offline-hours 24` 直接假裝你已經離開 24 小時,馬上生成該期間的敘事。playtest 一次搞定,不用隔夜。
 
