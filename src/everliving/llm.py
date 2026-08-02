@@ -1,4 +1,9 @@
-"""LLM client abstraction. Real calls go through AnthropicLLMClient; tests inject a fake."""
+"""LLM client abstraction. Real calls go through a provider client; tests inject a fake.
+
+Two providers are supported so the project isn't hostage to one account's credit
+balance. Selection is explicit (EVERLIVING_PROVIDER or --provider), never magic —
+silently switching models would quietly change what a playtest is measuring.
+"""
 
 from __future__ import annotations
 
@@ -8,9 +13,15 @@ from typing import Protocol
 
 from everliving import db
 
-# Cheap default so casual dev/playtest sessions don't rack up cost. Override with
-# EVERLIVING_MODEL (e.g. "claude-sonnet-5") once you're past kicking the tires.
+PROVIDERS = ("anthropic", "grok")
+DEFAULT_PROVIDER = "anthropic"
+
+# Cheap defaults so casual dev/playtest sessions don't rack up cost. Override either
+# with EVERLIVING_MODEL. Model IDs change — check the provider's console if one 404s.
 DEFAULT_MODEL = "claude-haiku-4-5"
+DEFAULT_GROK_MODEL = "grok-4"
+
+GROK_BASE_URL = "https://api.x.ai/v1"
 
 # Replies are 2-4 sentences, so this is generous for output alone. The headroom is for
 # models where thinking is on by default (Claude 5 family) — there max_tokens caps
@@ -42,7 +53,33 @@ def _server_message(exc) -> str:
         error = body.get("error")
         if isinstance(error, dict) and error.get("message"):
             return str(error["message"])
+        if isinstance(error, str) and error:  # xAI sometimes returns a bare string
+            return error
+        if body.get("message"):
+            return str(body["message"])
     return str(exc)
+
+
+def translate_sdk_error(exc: Exception, sdk, provider: str) -> Exception:
+    """Map a provider SDK's exception onto ours.
+
+    The anthropic and openai SDKs expose the same error hierarchy and the same
+    subclassing trap: AuthenticationError is a subclass of APIStatusError, so it has
+    to be tested first or a bad key reads as an outage.
+    """
+    if isinstance(exc, sdk.AuthenticationError):
+        return LLMAuthError(str(exc))
+    if isinstance(exc, sdk.APIStatusError):
+        return LLMUnavailable(_server_message(exc))
+    if isinstance(exc, sdk.APIConnectionError):
+        return LLMUnavailable(f"連不上 {provider} API:{exc}")
+    if isinstance(exc, TypeError):
+        # No credential resolvable at all — raised from header validation before any
+        # request goes out. Narrowed by message so a real TypeError in our own code
+        # still surfaces as the bug it is.
+        if "authentication" in str(exc).lower():
+            return LLMAuthError(str(exc))
+    return exc
 
 
 def extract_text(blocks) -> str:
@@ -101,24 +138,8 @@ class AnthropicLLMClient:
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             )
-        except self._anthropic.AuthenticationError as exc:
-            # A credential exists but the server rejected it (401). Must precede
-            # APIStatusError below — it's a subclass.
-            raise LLMAuthError(str(exc)) from exc
-        except self._anthropic.APIStatusError as exc:
-            # Billing, rate limits, server errors. The most common one in practice is
-            # an empty credit balance, which arrives as a 400 — not something the
-            # player can fix by rewording, so surface the server's text and stop.
-            raise LLMUnavailable(_server_message(exc)) from exc
-        except self._anthropic.APIConnectionError as exc:
-            raise LLMUnavailable(f"連不上 Anthropic API:{exc}") from exc
-        except TypeError as exc:
-            # No credential could be resolved at all — the SDK raises a plain TypeError
-            # from header validation before any request goes out. Narrow by message so
-            # a genuine TypeError in our own code still surfaces as a bug.
-            if "authentication" not in str(exc).lower():
-                raise
-            raise LLMAuthError(str(exc)) from exc
+        except Exception as exc:
+            raise translate_sdk_error(exc, self._anthropic, "Anthropic") from exc
         self.last_usage = {
             "model": self._model,
             "input_tokens": response.usage.input_tokens,
@@ -127,3 +148,54 @@ class AnthropicLLMClient:
         if response.stop_reason == "refusal":
             raise LLMRefusal("模型拒絕回應這個請求。")
         return extract_text(response.content)
+
+
+class GrokLLMClient:
+    """xAI's Grok, via its OpenAI-compatible endpoint. Requires XAI_API_KEY."""
+
+    def __init__(self, model: str | None = None) -> None:
+        import openai  # lazy import: only needed when this provider is selected
+
+        self._openai = openai
+        api_key = os.environ.get("XAI_API_KEY")
+        if not api_key:
+            # The OpenAI SDK would otherwise raise at construction with a message
+            # naming OPENAI_API_KEY, which is the wrong variable to go looking for.
+            raise LLMAuthError("找不到 XAI_API_KEY。")
+        self._client = openai.OpenAI(api_key=api_key, base_url=GROK_BASE_URL)
+        self._model = model or os.environ.get("EVERLIVING_MODEL", DEFAULT_GROK_MODEL)
+        self.last_usage: dict | None = None
+
+    def complete(self, system_prompt: str, user_message: str) -> str:
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                max_tokens=MAX_TOKENS,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+            )
+        except Exception as exc:
+            raise translate_sdk_error(exc, self._openai, "xAI") from exc
+
+        usage = response.usage
+        self.last_usage = {
+            "model": self._model,
+            "input_tokens": usage.prompt_tokens,
+            "output_tokens": usage.completion_tokens,
+        }
+        choice = response.choices[0]
+        if choice.finish_reason == "content_filter":
+            raise LLMRefusal("模型拒絕回應這個請求。")
+        return (choice.message.content or "").strip()
+
+
+def make_client(provider: str | None = None, model: str | None = None) -> LLMClient:
+    """Build the selected provider's client. Selection is explicit, never inferred."""
+    provider = (provider or os.environ.get("EVERLIVING_PROVIDER") or DEFAULT_PROVIDER).lower()
+    if provider == "anthropic":
+        return AnthropicLLMClient(model=model)
+    if provider == "grok":
+        return GrokLLMClient(model=model)
+    raise ValueError(f"unknown provider {provider!r}; expected one of {PROVIDERS}")

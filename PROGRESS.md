@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-08-02 — 加上 Grok 供應商支援
+
+Agent: Claude Opus 5(互動 session)
+
+Anthropic 額度還沒入帳,人類選擇加 Grok 當替代來源,不要被單一帳號的額度卡住 H-1。
+
+- `GrokLLMClient`:走 xAI 的 OpenAI 相容端點(`https://api.x.ai/v1`),用 `openai` SDK。需要 `XAI_API_KEY`。
+- `make_client(provider)` 工廠 + `--provider` 參數 + `EVERLIVING_PROVIDER` 環境變數。
+- **選擇一律明示,不做自動偵測**。「哪邊有額度就用哪邊」聽起來方便,但偷偷換模型等於偷偷改變 playtest 在量什麼——H-1 要判斷的是敘事有沒有打中你,那個判斷跟哪個模型寫的直接相關。
+- 錯誤對應抽成共用的 `translate_sdk_error()`。兩個 SDK 的例外階層剛好一模一樣,連 `AuthenticationError` 是 `APIStatusError` 子類別這個陷阱都一樣,不該複製兩份。
+- 兩個形狀差異要處理:Anthropic 用 `system=` 參數,OpenAI 形狀要把它塞進 messages 當 system 角色;Anthropic 是 `usage.input_tokens`,OpenAI 是 `usage.prompt_tokens`。成本記錄兩邊都照常運作。
+- 缺 `XAI_API_KEY` 時自己先擋下來——否則 OpenAI SDK 會報「找不到 OPENAI_API_KEY」,叫人去找一個根本不相干的變數。
+
+測試 83 passed(新增 15 個)。實測 `--provider grok` 在沒 key 時會乾淨退出並指出要設哪個變數。
+
+**H-1 的品質提醒**:Grok 是前沿模型,不是本機小模型,所以先前「模型太弱會污染判斷」的顧慮大致不適用。但**繁體中文的文學性敘事 Claude 通常比較穩**,而 H-1 要判斷的正是敘事有沒有打中你——如果用 Grok 跑完覺得普通,值得再用 Claude 跑一次對照,再下結論。
+
+**下一步**:H-1 playtest(人類),兩家擇一。
+
+**待人決定**:H-1 playtest;舊 commit 的 history 重寫指令仍待執行。
+
+---
+
 ## 2026-08-02 — 第一次真的打 API,又抓到一個錯誤路徑
 
 Agent: Claude Opus 5(互動 session)

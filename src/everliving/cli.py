@@ -9,7 +9,13 @@ from datetime import timedelta
 from everliving import db, persona
 from everliving.agent_loop import respond
 from everliving.config import load_dotenv
-from everliving.llm import LLMAuthError, LLMRefusal, LLMUnavailable
+from everliving.llm import (
+    PROVIDERS,
+    LLMAuthError,
+    LLMRefusal,
+    LLMUnavailable,
+    make_client,
+)
 from everliving.offline import simulate_offline_period, time_since_last_seen
 
 DB_PATH = "everliving.db"
@@ -26,6 +32,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "假裝你已經離開 N 小時,直接生成該期間的敘事。"
             "這樣不用真的等一天就能測試核心體驗(H-1 playtest 用)。"
         ),
+    )
+    parser.add_argument(
+        "--provider",
+        choices=PROVIDERS,
+        default=None,
+        help="用哪家的模型(預設 anthropic;也可用 EVERLIVING_PROVIDER 設定)。",
     )
     parser.add_argument(
         "--cost-report",
@@ -63,7 +75,8 @@ def _exit_no_credentials(exc) -> None:
     and closing here makes that block write to a closed database.
     """
     print("\n找不到可用的 API 憑證,沒辦法呼叫模型。")
-    print("設定 ANTHROPIC_API_KEY,或用 `ant auth login` 登入後再試一次(見 README)。")
+    print("Anthropic:設定 ANTHROPIC_API_KEY,或用 `ant auth login` 登入。")
+    print("Grok:設定 XAI_API_KEY,並加上 --provider grok(見 README)。")
     print(f"(原始訊息:{exc})")
     sys.exit(1)
 
@@ -84,10 +97,10 @@ def main(argv: list[str] | None = None) -> None:
     agent = db.get_agent(conn, agent_id)
 
     try:
-        from everliving.llm import AnthropicLLMClient
-
-        llm = AnthropicLLMClient()
-    except Exception as exc:  # the `anthropic` package isn't installed
+        llm = make_client(args.provider)
+    except LLMAuthError as exc:
+        _exit_no_credentials(exc)
+    except Exception as exc:  # the provider's package isn't installed
         print(f"無法初始化 LLM client:{exc}")
         print("先跑 `pip install -r requirements.txt`(見 README)。")
         sys.exit(1)

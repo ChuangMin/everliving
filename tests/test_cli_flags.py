@@ -19,7 +19,7 @@ def test_offline_hours_forces_narrative_on_first_run(tmp_path, monkeypatch, caps
     """Without the flag a first run has no narrative; with it, you can test the hook immediately."""
     monkeypatch.setattr(cli, "DB_PATH", str(tmp_path / "test.db"))
     fake = FakeLLMClient(reply="我把港口的舊幫浦拆了。")
-    monkeypatch.setattr("everliving.llm.AnthropicLLMClient", lambda: fake)
+    monkeypatch.setattr("everliving.llm.AnthropicLLMClient", lambda **kw: fake)
     monkeypatch.setattr("builtins.input", _scripted_input(["exit"]))
 
     cli.main(["--offline-hours", "72"])

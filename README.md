@@ -41,6 +41,19 @@ $env:ANTHROPIC_API_KEY = "sk-ant-..."
 
 或者裝 `ant` CLI 跑 `ant auth login`,SDK 會自動抓登入後的 profile,不用自己保管 key。
 
+### 換供應商 / Switching providers
+
+不想被單一帳號的額度卡住的話,也可以用 xAI 的 Grok:
+
+```powershell
+$env:XAI_API_KEY = "xai-..."
+python -m everliving.cli --provider grok
+```
+
+或設 `EVERLIVING_PROVIDER=grok` 省掉每次打參數。模型 ID 用 `EVERLIVING_MODEL` 覆蓋——各家的 ID 會變,404 的時候去對應的 console 查目前有哪些。
+
+**選擇一律是明示的,不會自動偵測**:偷偷換模型等於偷偷改變 playtest 在量什麼。
+
 關掉再重開,第二次啟動時會先印出「這段時間發生的事」——這就是里程碑 0 要驗證的核心體驗。
 離線期間不只是產生一段敘述:agent 的狀態會實際改變,而且通常會留下**一件在等你回應的事**。
 你回應之後,下一次離線期間會接著發展下去。
