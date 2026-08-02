@@ -122,11 +122,13 @@ def _build_prompts(
         "2. 通常要留下一件**懸而未決、需要玩家回應的事**(open_thread)。"
         "這是玩家下次想回來的理由。但不要每次都硬塞,沒有就填 null。\n"
         "3. 如果既有的未解事項已經因為這段時間的發展而結束,把它的 id 放進 resolved_thread_ids。\n\n"
+        "4. **所有文字一律用繁體中文,包括 state_changes 的鍵名**"
+        "(要寫「手部狀態」不是 physical_status)。玩家看得到這些鍵名。\n\n"
         "只輸出 JSON,不要有其他文字:\n"
         "{\n"
         '  "narrative": "2-4 句第一人稱敘述,給玩家讀的,要有畫面感",\n'
         '  "events": ["具體發生的事,一句一件"],\n'
-        '  "state_changes": {"狀態名": "新的值"},\n'
+        '  "state_changes": {"中文狀態名": "中文的新值"},\n'
         '  "open_thread": "需要玩家回應的懸念,或 null",\n'
         '  "resolved_thread_ids": [已解決的既有事項 id]\n'
         "}"
