@@ -15,4 +15,4 @@
 
 ## 給協作 Agent
 
-如果你是被排程或被邀請進來開發這個專案的 Claude Code agent,先讀 [CLAUDE.md](./CLAUDE.md)。
+這個專案預期會有多家 AI agent(Claude Code、Codex、Qwen、Kimi、Grok…)協作開發。不管你是哪一家,先讀 [AGENTS.md](./AGENTS.md)。
