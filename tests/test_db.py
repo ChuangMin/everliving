@@ -1,14 +1,4 @@
-import pytest
-
 from everliving import db
-
-
-@pytest.fixture
-def conn():
-    connection = db.get_connection(":memory:")
-    db.init_schema(connection)
-    yield connection
-    connection.close()
 
 
 def test_create_and_get_agent(conn):

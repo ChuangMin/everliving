@@ -10,11 +10,11 @@
 
 - [x] `done` **T0-1 SQLite schema** — agent 人設 table + 事件記憶 table(時間戳、內容、來源)。claimed-by: Claude Sonnet 5(互動 session)
 - [x] `done` **T0-2 單一 agent 人設** — 寫死一個原創角色的 persona(名字、背景、個性),存進 DB 初始化腳本。claimed-by: Claude Sonnet 5(互動 session)
-- [ ] `todo` **T0-3 互動迴圈** — CLI 對話迴圈:玩家輸入 → agent 回應(帶入 persona + 近期記憶呼叫 LLM)→ 存成記憶事件。claimed-by: -
-- [ ] `todo` **T0-4 離線時間追蹤** — 記錄玩家上次離開的時間戳;下次啟動時算經過多久。claimed-by: -
-- [ ] `todo` **T0-5 離線敘事生成** — 一次 LLM 呼叫:輸入「經過多久 + 最近記憶」,輸出「這段時間 agent 做了什麼」的敘事;存成一筆記憶事件。claimed-by: -
-- [ ] `todo` **T0-6 上線讀敘事** — 玩家重新啟動時,先印出上次離線期間的敘事,再進入互動迴圈。claimed-by: -
-- [ ] `todo` **T0-7 LLM 呼叫可測試化** — 把 LLM 呼叫包成可注入/可 mock 的介面,針對 T0-3/T0-5 的邏輯寫自動測試(不用真的打 API)。claimed-by: -
+- [x] `done` **T0-3 互動迴圈** — CLI 對話迴圈:玩家輸入 → agent 回應(帶入 persona + 近期記憶呼叫 LLM)→ 存成記憶事件。claimed-by: Claude Sonnet 5(互動 session)
+- [ ] `todo` **T0-4 離線時間追蹤** — 記錄玩家上次離開的時間戳;下次啟動時算經過多久。`db.set_last_seen`/`get_last_seen` 已經有了,缺的是接進 `cli.py` 的啟動/離開流程。claimed-by: -
+- [ ] `todo` **T0-5 離線敘事生成** — 一次 LLM 呼叫:輸入「經過多久 + 最近記憶」,輸出「這段時間 agent 做了什麼」的敘事;存成一筆記憶事件。依賴 T0-4。claimed-by: -
+- [ ] `todo` **T0-6 上線讀敘事** — 玩家重新啟動時,先印出上次離線期間的敘事,再進入互動迴圈。依賴 T0-5。claimed-by: -
+- [x] `done` **T0-7 LLM 呼叫可測試化** — 把 LLM 呼叫包成可注入/可 mock 的介面,針對 T0-3/T0-5 的邏輯寫自動測試(不用真的打 API)。claimed-by: Claude Sonnet 5(互動 session)
 - [ ] `todo` **T0-8 本機執行說明** — README 補上安裝依賴、設定 API key(`.env.example`)、執行方式。claimed-by: -
 
 > T0-1~T0-4 沒有強依賴順序,建議照編號做;T0-5/T0-6 依賴前面幾項。任務做完在這裡打勾、狀態改 `done`,並在 `PROGRESS.md` 留一則記錄。

@@ -1,14 +1,4 @@
-import pytest
-
 from everliving import db, persona
-
-
-@pytest.fixture
-def conn():
-    connection = db.get_connection(":memory:")
-    db.init_schema(connection)
-    yield connection
-    connection.close()
 
 
 def test_seed_default_agent_creates_agent(conn):
