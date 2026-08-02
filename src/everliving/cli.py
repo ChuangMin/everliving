@@ -8,7 +8,7 @@ from datetime import timedelta
 
 from everliving import db, persona
 from everliving.agent_loop import respond
-from everliving.llm import LLMRefusal
+from everliving.llm import LLMAuthError, LLMRefusal
 from everliving.offline import simulate_offline_period, time_since_last_seen
 
 DB_PATH = "everliving.db"
@@ -48,6 +48,18 @@ def _print_cost_report(conn) -> None:
     print("\n(換算成金額請自行乘上當前各模型單價——單價會變,所以這裡只存 token 這個不會過期的事實)")
 
 
+def _exit_no_credentials(exc) -> None:
+    """Credentials only fail on the first API call, so this can fire mid-session.
+
+    Deliberately does not close the connection — the caller's `finally` owns cleanup,
+    and closing here makes that block write to a closed database.
+    """
+    print("\n找不到可用的 API 憑證,沒辦法呼叫模型。")
+    print("設定 ANTHROPIC_API_KEY,或用 `ant auth login` 登入後再試一次(見 README)。")
+    print(f"(原始訊息:{exc})")
+    sys.exit(1)
+
+
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
 
@@ -66,9 +78,9 @@ def main(argv: list[str] | None = None) -> None:
         from everliving.llm import AnthropicLLMClient
 
         llm = AnthropicLLMClient()
-    except Exception as exc:  # missing package or ANTHROPIC_API_KEY
+    except Exception as exc:  # the `anthropic` package isn't installed
         print(f"無法初始化 LLM client:{exc}")
-        print("設定 ANTHROPIC_API_KEY 並安裝 `anthropic` 套件後再試一次(見 README)。")
+        print("先跑 `pip install -r requirements.txt`(見 README)。")
         sys.exit(1)
 
     if args.offline_hours is not None:
@@ -79,6 +91,8 @@ def main(argv: list[str] | None = None) -> None:
     if elapsed is not None:
         try:
             result = simulate_offline_period(conn, agent_id, llm, elapsed)
+        except LLMAuthError as exc:
+            _exit_no_credentials(exc)
         except LLMRefusal as exc:
             # Don't let this abort startup — the conversation loop is still usable.
             print(f"\n(這次沒能生成離線敘事:{exc})\n")
@@ -106,6 +120,8 @@ def main(argv: list[str] | None = None) -> None:
                 continue
             try:
                 reply = respond(conn, agent_id, llm, player_message)
+            except LLMAuthError as exc:
+                _exit_no_credentials(exc)
             except LLMRefusal as exc:
                 print(f"({exc} 換個說法再試一次。)")
                 continue

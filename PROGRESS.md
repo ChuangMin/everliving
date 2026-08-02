@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-08-02 — 真的跑一次,抓到兩個只有跑才會出現的 bug
+
+Agent: Claude Opus 5(互動 session)
+
+人類去 console 儲值前,先把回來要用的東西備好。本機裝了 `anthropic`(0.120.2),然後**實際在沒有 key 的情況下跑一次 CLI**——結果抓到兩個測試抓不到、只有真的執行才會現形的 bug:
+
+**1. 沒有 API key 時,CLI 會照常進入對話迴圈,友善錯誤訊息完全沒觸發。**
+原本的 `try/except` 包在 `AnthropicLLMClient()` 建構上,但 SDK 的憑證解析是**延遲**的——沒有 key 也能順利建構,要等到第一次真的呼叫才炸。使用者體驗會是:打完第一句話,吃到一整串 raw traceback。
+
+而且 SDK 丟的是**兩種不同的例外**:
+- 完全找不到憑證 → 從 header 驗證丟出的**純 `TypeError`**(根本沒送出請求)
+- 有 key 但被伺服器拒絕(401)→ `anthropic.AuthenticationError`
+
+→ 新增 `LLMAuthError`,兩種都對應過去。`TypeError` 那條有用訊息內容做篩選,避免把我們自己程式裡真正的 `TypeError` 吃掉(有測試守著這點)。CLI 兩個呼叫點都接住,印出「設定 ANTHROPIC_API_KEY 或用 `ant auth login`」然後乾淨退出。
+
+**2. 修第一個 bug 的過程中,自己製造了第二個。**
+`_exit_no_credentials()` 裡順手 `conn.close()`,結果 `finally` 區塊接著要寫 `last_seen` → `sqlite3.ProgrammingError: Cannot operate on a closed database`。連線清理本來就歸 `finally` 管,那行 close 是多餘且有害的,已移除並在 docstring 註明原因。
+
+測試 58 passed(新增 5 個:CLI 兩條無憑證路徑、兩種 SDK 例外的對應、以及「無關的 TypeError 仍要往上拋」)。
+
+**這一輪的教訓**:前一輪的 53 個測試全過,但這兩個 bug 一個都沒抓到——因為它們都在「跟真實 SDK 的介面」上,而測試裡的 SDK 是我自己寫的假的。**mock 只能驗證我以為的契約,不能驗證真實的契約。**
+
+**下一步**:H-1 playtest(人類)。`anthropic` 已裝好,儲值完設好 key 就能直接跑。
+
+**待人決定**:H-1 playtest;舊 commit 的 history 重寫指令仍待執行。
+
+---
+
 ## 2026-08-02 — 修掉 LLM 回應處理的真實 bug(in-scope 稽核)
 
 Agent: Claude Opus 5(互動 session)

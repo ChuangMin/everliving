@@ -22,6 +22,11 @@ class LLMRefusal(RuntimeError):
     """The model declined to answer. Distinct from a network or auth failure."""
 
 
+class LLMAuthError(RuntimeError):
+    """No usable credentials. Surfaces on the first call, not at construction —
+    the SDK resolves credentials lazily, so a missing key looks fine until you call."""
+
+
 def extract_text(blocks) -> str:
     """Join the text blocks of a response, skipping thinking and tool blocks.
 
@@ -65,17 +70,29 @@ class AnthropicLLMClient:
     def __init__(self, model: str | None = None) -> None:
         import anthropic  # lazy import: only needed for real runs, not for mocked tests
 
+        self._anthropic = anthropic
         self._client = anthropic.Anthropic()
         self._model = model or os.environ.get("EVERLIVING_MODEL", DEFAULT_MODEL)
         self.last_usage: dict | None = None
 
     def complete(self, system_prompt: str, user_message: str) -> str:
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=MAX_TOKENS,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-        )
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=MAX_TOKENS,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            )
+        except self._anthropic.AuthenticationError as exc:
+            # A credential exists but the server rejected it (401).
+            raise LLMAuthError(str(exc)) from exc
+        except TypeError as exc:
+            # No credential could be resolved at all — the SDK raises a plain TypeError
+            # from header validation before any request goes out. Narrow by message so
+            # a genuine TypeError in our own code still surfaces as a bug.
+            if "authentication" not in str(exc).lower():
+                raise
+            raise LLMAuthError(str(exc)) from exc
         self.last_usage = {
             "model": self._model,
             "input_tokens": response.usage.input_tokens,
