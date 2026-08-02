@@ -13,20 +13,40 @@ from typing import Protocol
 
 from everliving import db
 
-PROVIDERS = ("anthropic", "grok")
+PROVIDERS = ("anthropic", "grok", "groq")
 DEFAULT_PROVIDER = "anthropic"
 
-# Cheap defaults so casual dev/playtest sessions don't rack up cost. Override either
-# with EVERLIVING_MODEL. Model IDs change — check the provider's console if one 404s.
+# Cheap default so casual dev/playtest sessions don't rack up cost. Override with
+# EVERLIVING_MODEL. Model IDs change — check the provider's console if one 404s.
 DEFAULT_MODEL = "claude-haiku-4-5"
-DEFAULT_GROK_MODEL = "grok-4"
 
-GROK_BASE_URL = "https://api.x.ai/v1"
+# grok (xAI) and groq (inference host for open models) are different companies whose
+# names differ by one letter. Both speak the OpenAI wire format, so they share an
+# implementation and differ only in the three values below.
+OPENAI_COMPATIBLE = {
+    "grok": {
+        "base_url": "https://api.x.ai/v1",
+        "key_env": "XAI_API_KEY",
+        "default_model": "grok-4",
+        "label": "xAI (Grok)",
+    },
+    "groq": {
+        "base_url": "https://api.groq.com/openai/v1",
+        "key_env": "GROQ_API_KEY",
+        "default_model": "qwen/qwen3.6-27b",
+        "label": "Groq",
+    },
+}
 
-# Replies are 2-4 sentences, so this is generous for output alone. The headroom is for
-# models where thinking is on by default (Claude 5 family) — there max_tokens caps
-# thinking *and* text together, and a tight limit truncates the reply mid-sentence.
-MAX_TOKENS = 2048
+GROK_BASE_URL = OPENAI_COMPATIBLE["grok"]["base_url"]
+DEFAULT_GROK_MODEL = OPENAI_COMPATIBLE["grok"]["default_model"]
+
+# A ceiling, not a spend — you're only billed for what's actually generated, so this
+# is set well above the 2-4 sentences a reply needs. The headroom matters for models
+# that reason before answering (the Claude 5 family, Qwen): there the cap covers
+# reasoning *and* output together. Observed: Qwen hit a 2048 cap exactly, which
+# truncates the JSON the offline simulation depends on.
+MAX_TOKENS = 6000
 
 
 class LLMRefusal(RuntimeError):
@@ -80,6 +100,25 @@ def translate_sdk_error(exc: Exception, sdk, provider: str) -> Exception:
         if "authentication" in str(exc).lower():
             return LLMAuthError(str(exc))
     return exc
+
+
+def strip_reasoning(text: str) -> str:
+    """Remove inline <think> reasoning from an OpenAI-format reply.
+
+    Reasoning models served over the OpenAI wire format put their deliberation in the
+    content itself rather than in a separate block, so without this the player reads
+    the model talking itself through the answer before reaching the answer.
+
+    Splits on the *last* closing tag: some models emit a closing tag without an
+    opening one, and nesting would otherwise strand part of the reasoning.
+    """
+    close = "</think>"
+    if close in text:
+        text = text.rsplit(close, 1)[1]
+    elif text.lstrip().startswith("<think>"):
+        # Opened but never closed — the model spent its whole budget reasoning.
+        return ""
+    return text.strip()
 
 
 def extract_text(blocks) -> str:
@@ -150,20 +189,26 @@ class AnthropicLLMClient:
         return extract_text(response.content)
 
 
-class GrokLLMClient:
-    """xAI's Grok, via its OpenAI-compatible endpoint. Requires XAI_API_KEY."""
+class OpenAICompatibleClient:
+    """Any endpoint speaking the OpenAI wire format — currently xAI and Groq."""
 
-    def __init__(self, model: str | None = None) -> None:
+    def __init__(self, provider: str, model: str | None = None) -> None:
         import openai  # lazy import: only needed when this provider is selected
 
+        config = OPENAI_COMPATIBLE[provider]
         self._openai = openai
-        api_key = os.environ.get("XAI_API_KEY")
+        self._label = config["label"]
+
+        api_key = os.environ.get(config["key_env"])
         if not api_key:
-            # The OpenAI SDK would otherwise raise at construction with a message
-            # naming OPENAI_API_KEY, which is the wrong variable to go looking for.
-            raise LLMAuthError("找不到 XAI_API_KEY。")
-        self._client = openai.OpenAI(api_key=api_key, base_url=GROK_BASE_URL)
-        self._model = model or os.environ.get("EVERLIVING_MODEL", DEFAULT_GROK_MODEL)
+            # Checked here because the OpenAI SDK would complain about OPENAI_API_KEY,
+            # sending you after a variable that has nothing to do with this provider.
+            raise LLMAuthError(_missing_key_message(provider, config["key_env"]))
+
+        self._client = openai.OpenAI(api_key=api_key, base_url=config["base_url"])
+        self._model = model or os.environ.get(
+            "EVERLIVING_MODEL", config["default_model"]
+        )
         self.last_usage: dict | None = None
 
     def complete(self, system_prompt: str, user_message: str) -> str:
@@ -172,12 +217,13 @@ class GrokLLMClient:
                 model=self._model,
                 max_tokens=MAX_TOKENS,
                 messages=[
+                    # Anthropic takes the persona via `system=`; here it's a message.
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message},
                 ],
             )
         except Exception as exc:
-            raise translate_sdk_error(exc, self._openai, "xAI") from exc
+            raise translate_sdk_error(exc, self._openai, self._label) from exc
 
         usage = response.usage
         self.last_usage = {
@@ -188,14 +234,46 @@ class GrokLLMClient:
         choice = response.choices[0]
         if choice.finish_reason == "content_filter":
             raise LLMRefusal("模型拒絕回應這個請求。")
-        return (choice.message.content or "").strip()
+        return strip_reasoning(choice.message.content or "")
+
+
+def _missing_key_message(provider: str, key_env: str) -> str:
+    """grok/groq differ by one letter, so a missing key is often the wrong provider."""
+    sibling = "groq" if provider == "grok" else "grok"
+    sibling_env = OPENAI_COMPATIBLE[sibling]["key_env"]
+    hint = ""
+    if os.environ.get(sibling_env):
+        hint = (
+            f" 但找到了 {sibling_env}——你要的可能是 `--provider {sibling}`"
+            f"({OPENAI_COMPATIBLE[sibling]['label']} 跟 "
+            f"{OPENAI_COMPATIBLE[provider]['label']} 是不同的服務)。"
+        )
+    return f"找不到 {key_env}。{hint}"
+
+
+class GrokLLMClient(OpenAICompatibleClient):
+    """xAI's Grok. Requires XAI_API_KEY."""
+
+    def __init__(self, model: str | None = None) -> None:
+        super().__init__("grok", model)
+
+
+class GroqLLMClient(OpenAICompatibleClient):
+    """Groq — fast inference for open-weight models. Requires GROQ_API_KEY."""
+
+    def __init__(self, model: str | None = None) -> None:
+        super().__init__("groq", model)
 
 
 def make_client(provider: str | None = None, model: str | None = None) -> LLMClient:
     """Build the selected provider's client. Selection is explicit, never inferred."""
-    provider = (provider or os.environ.get("EVERLIVING_PROVIDER") or DEFAULT_PROVIDER).lower()
+    provider = (
+        provider or os.environ.get("EVERLIVING_PROVIDER") or DEFAULT_PROVIDER
+    ).lower()
     if provider == "anthropic":
         return AnthropicLLMClient(model=model)
     if provider == "grok":
         return GrokLLMClient(model=model)
+    if provider == "groq":
+        return GroqLLMClient(model=model)
     raise ValueError(f"unknown provider {provider!r}; expected one of {PROVIDERS}")

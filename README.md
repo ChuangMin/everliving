@@ -43,14 +43,22 @@ $env:ANTHROPIC_API_KEY = "sk-ant-..."
 
 ### 換供應商 / Switching providers
 
-不想被單一帳號的額度卡住的話,也可以用 xAI 的 Grok:
+不想被單一帳號的額度卡住的話,還有兩個選擇。**注意 `grok` 和 `groq` 是不同的服務,名字只差一個字母**:
+
+| provider | 是什麼 | 需要的環境變數 |
+|---|---|---|
+| `anthropic` | Claude(預設) | `ANTHROPIC_API_KEY` |
+| `groq` | Groq —— 高速跑開源模型的推論服務,有免費額度 | `GROQ_API_KEY` |
+| `grok` | xAI 的 Grok 模型 | `XAI_API_KEY` |
 
 ```powershell
-$env:XAI_API_KEY = "xai-..."
-python -m everliving.cli --provider grok
+$env:GROQ_API_KEY = "gsk_..."
+python -m everliving.cli --provider groq
 ```
 
-或設 `EVERLIVING_PROVIDER=grok` 省掉每次打參數。模型 ID 用 `EVERLIVING_MODEL` 覆蓋——各家的 ID 會變,404 的時候去對應的 console 查目前有哪些。
+或設 `EVERLIVING_PROVIDER=groq` 省掉每次打參數。模型 ID 用 `EVERLIVING_MODEL` 覆蓋——各家的 ID 會變,404 的時候去對應的 console 查目前有哪些。
+
+**Groq 上的模型實測**(用真的離線模擬 prompt 比較過,見 `PROGRESS.md`):`qwen/qwen3.6-27b` 的繁中文筆和懸念設計明顯最好,所以是預設值。`openai/gpt-oss-120b` 可用但狀態鍵名會跑成英文;`llama-3.3-70b-versatile` 敘事偏流水帳。
 
 **選擇一律是明示的,不會自動偵測**:偷偷換模型等於偷偷改變 playtest 在量什麼。
 
