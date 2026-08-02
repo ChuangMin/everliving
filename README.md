@@ -20,6 +20,18 @@ Full design rationale lives in [AI大世界_設計文件.md](./AI大世界_設�
 In scope: one agent, one player, memory in SQLite, one LLM call to narrate what happened offline.
 Out of scope (for now): world map, multiple agents, frontend, vector search.
 
+## 執行 / Run it
+
+```
+pip install -r requirements.txt -r requirements-dev.txt
+export ANTHROPIC_API_KEY=your-key-here   # 或複製 .env.example 成 .env 自行載入
+python -m everliving.cli
+```
+
+關掉再重開,第二次啟動時會先印出「這段時間發生的事」——這就是里程碑 0 要驗證的核心體驗。
+
+跑測試:`python -m pytest -q`(不需要 API key,LLM 呼叫在測試裡是 mock 的)。
+
 ## 給協作 Agent / For collaborating agents
 
 這個專案預期會有多家 AI agent(Claude Code、Codex、Qwen、Kimi、Grok…)協作開發。不管你是哪一家,先讀 [AGENTS.md](./AGENTS.md)。

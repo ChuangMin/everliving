@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-08-02 — T0-4/T0-5/T0-6/T0-8:里程碑 0 的 T0-* 全部完成
+
+Agent: Claude Sonnet 5(互動 session,非排程)
+
+- `src/everliving/offline.py`:`time_since_last_seen()`(算離線多久)、`generate_offline_narrative()`(一次 LLM 呼叫產生敘事,存成 `offline_narrative` 記憶事件)
+- `cli.py` 接上完整流程:啟動時先算離線時間 → 有的話生成並印出敘事 → 進入互動迴圈 → `finally` 區塊保證離開時一定寫 `last_seen`(含 Ctrl+C/EOF)
+- `tests/test_offline.py`:9 個測試,涵蓋時間差計算、時長格式化、敘事生成與記憶寫入、prompt 內容
+- `tests/test_cli.py`:**端對端**測試,monkeypatch 掉 `AnthropicLLMClient` 跟 `input()`,實際跑兩次 `cli.main()` 模擬「關掉隔天打開」——第一次沒有敘事、第二次真的印出敘事。這是里程碑 0 核心體驗第一次被完整驗證過
+- `requirements.txt`(`anthropic`)、`.env.example`、README 補執行說明
+- 全部測試:`python -m pytest -q` → **22 passed**,不需要真的 API key
+
+**里程碑 0 的 T0-1 ~ T0-8 全部 `done`。** 剩下唯一沒做的是 `TASKS.md` 裡的 **H-1 真人 playtest**——這個不能由 agent 代跑,需要人自己設定 `ANTHROPIC_API_KEY`、真的跑 `python -m everliving.cli`、關掉隔天(或至少過一段時間)重開,看看想不想回來看敘事。這是整個里程碑 0 唯一的成敗判準。
+
+**下一步**:等人類完成 H-1 playtest 並給出「還想不想回來」的判斷。在那之前,agent(不管排程或互動)不應該提前規劃或動手做里程碑 1 的東西(多 agent)。
+
+**待人決定**:
+- **H-1 playtest**——上面說的,只有你能做。
+- 排程 agent(everliving-planner / everliving-builder)還沒建成,需要先到 https://claude.ai/code/routines 連結 GitHub 帳號。
+- 舊 commit(`122c070`/`4013c61`/`32e18cf`)的 history 重寫指令仍待人手動執行確認。
+
+---
+
 ## 2026-08-02 — T0-3 / T0-7:互動迴圈 + 可 mock 的 LLM 介面
 
 Agent: Claude Sonnet 5(互動 session,非排程)
