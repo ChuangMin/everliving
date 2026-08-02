@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from everliving import db, persona
 from everliving.agent_loop import respond
+from everliving.llm import LLMRefusal
 from everliving.offline import simulate_offline_period, time_since_last_seen
 
 DB_PATH = "everliving.db"
@@ -76,16 +77,21 @@ def main(argv: list[str] | None = None) -> None:
         elapsed = time_since_last_seen(conn, agent_id)
 
     if elapsed is not None:
-        result = simulate_offline_period(conn, agent_id, llm, elapsed)
-        print(f"\n({agent['name']} 這段時間發生的事)")
-        print(result.narrative)
-        if result.state_changes:
-            print("\n有些事情變了:")
-            for key, value in result.state_changes.items():
-                print(f"  · {key}:{value}")
-        if result.open_thread:
-            print(f"\n[ 有件事在等你 ] {result.open_thread}")
-        print()
+        try:
+            result = simulate_offline_period(conn, agent_id, llm, elapsed)
+        except LLMRefusal as exc:
+            # Don't let this abort startup — the conversation loop is still usable.
+            print(f"\n(這次沒能生成離線敘事:{exc})\n")
+        else:
+            print(f"\n({agent['name']} 這段時間發生的事)")
+            print(result.narrative)
+            if result.state_changes:
+                print("\n有些事情變了:")
+                for key, value in result.state_changes.items():
+                    print(f"  · {key}:{value}")
+            if result.open_thread:
+                print(f"\n[ 有件事在等你 ] {result.open_thread}")
+            print()
 
     print(f"你正在和 {agent['name']} 對話。輸入 exit 離開。")
     try:
@@ -98,7 +104,11 @@ def main(argv: list[str] | None = None) -> None:
                 break
             if not player_message:
                 continue
-            reply = respond(conn, agent_id, llm, player_message)
+            try:
+                reply = respond(conn, agent_id, llm, player_message)
+            except LLMRefusal as exc:
+                print(f"({exc} 換個說法再試一次。)")
+                continue
             print(f"{agent['name']}: {reply}")
     finally:
         db.set_last_seen(conn, agent_id)

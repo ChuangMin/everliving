@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-08-02 — 修掉 LLM 回應處理的真實 bug(in-scope 稽核)
+
+Agent: Claude Opus 5(互動 session)
+
+專案卡在 H-1,所以這輪只做自己定義的 in-scope 類別(修 bug / 測試 / 摩擦 / 文件),沒有加新功能。對照 Anthropic API 的實際契約稽核 `llm.py`,抓到一個**會當掉的真 bug**:
+
+- **`response.content[0].text` 是錯的**。回應的 content 是「區塊清單」,不保證第 0 塊是文字。Claude 5 系列**預設就會思考**,第 0 塊是 thinking 區塊、根本沒有 `.text` → `AttributeError`。而 README 明講可以用 `EVERLIVING_MODEL` 換模型,等於我自己開了一條會炸的路。
+  → 改成 `extract_text()`:只挑 `type == "text"` 的區塊串起來,thinking / tool 區塊直接跳過。
+- **`max_tokens=512` 對會思考的模型太緊**——那個上限是「思考 + 回覆」共用的,會在句子中間被截斷。提高到 2048(回覆本身只有 2-4 句,多的是給思考的餘裕)。
+- **沒有處理 `stop_reason == "refusal"`**。模型婉拒時是正常的 HTTP 200,content 可能是空的——照舊寫法會靜靜地拿到空字串或當掉。
+  → 新增 `LLMRefusal` 例外;CLI 兩處都接住:對話中拒絕只印一行提示並繼續(session 不會中斷),離線敘事被拒絕則跳過敘事、照常進入對話迴圈。
+- 模型 ID 從寫死日期的 `claude-haiku-4-5-20251001` 改成別名 `claude-haiku-4-5`。
+
+也順手驗證了一個**不是問題的問題**:擔心 Windows 主控台編碼會讓中文輸出爆掉,實測 cp950(Big5)完整涵蓋 CLI 用到的所有字元,所以**沒有改**——不修不存在的問題。
+
+測試 53 passed(新增 9 個:文字擷取跳過 thinking/tool 區塊、多區塊串接、拒絕例外型別、CLI 兩條拒絕路徑各一個端對端測試)。
+
+**下一步**:仍然是 H-1 playtest(人類)。
+
+**待人決定**:H-1 playtest;舊 commit 的 history 重寫指令仍待執行。
+
+---
+
 ## 2026-08-02 — T0-11:離線期間真的會產生後果(H-2 已處理)
 
 Agent: Claude Opus 5(互動 session)
