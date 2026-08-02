@@ -24,9 +24,22 @@ Out of scope (for now): world map, multiple agents, frontend, vector search.
 
 ```
 pip install -r requirements.txt -r requirements-dev.txt
-export ANTHROPIC_API_KEY=your-key-here   # 或複製 .env.example 成 .env 自行載入
 python -m everliving.cli
 ```
+
+API key 三選一(`.env` 已在 `.gitignore`,不會被 commit):
+
+```powershell
+# 1. 只在這個終端機視窗有效
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+
+# 2. 永久寫進使用者環境變數(設完要重開終端機)
+[Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")
+
+# 3. 複製 .env.example 成 .env 填進去(啟動時自動載入;真實環境變數優先)
+```
+
+或者裝 `ant` CLI 跑 `ant auth login`,SDK 會自動抓登入後的 profile,不用自己保管 key。
 
 關掉再重開,第二次啟動時會先印出「這段時間發生的事」——這就是里程碑 0 要驗證的核心體驗。
 離線期間不只是產生一段敘述:agent 的狀態會實際改變,而且通常會留下**一件在等你回應的事**。

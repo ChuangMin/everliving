@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from everliving import db, persona
 from everliving.agent_loop import respond
+from everliving.config import load_dotenv
 from everliving.llm import LLMAuthError, LLMRefusal
 from everliving.offline import simulate_offline_period, time_since_last_seen
 
@@ -62,6 +63,7 @@ def _exit_no_credentials(exc) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
+    load_dotenv()  # before the client resolves credentials
 
     conn = db.get_connection(DB_PATH)
     db.init_schema(conn)
