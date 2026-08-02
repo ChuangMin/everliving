@@ -8,8 +8,8 @@
 
 設計依據:`AI大世界_設計文件.md` 第 167–180 行。**範圍只到這裡**,不要提前規劃里程碑 1 以後的任務(見文件第 250 行:每階段結束要真的檢視,不要自動往下走)。
 
-- [ ] `todo` **T0-1 SQLite schema** — agent 人設 table + 事件記憶 table(時間戳、內容、來源)。claimed-by: -
-- [ ] `todo` **T0-2 單一 agent 人設** — 寫死一個原創角色的 persona(名字、背景、個性),存進 DB 初始化腳本。claimed-by: -
+- [x] `done` **T0-1 SQLite schema** — agent 人設 table + 事件記憶 table(時間戳、內容、來源)。claimed-by: Claude Sonnet 5(互動 session)
+- [x] `done` **T0-2 單一 agent 人設** — 寫死一個原創角色的 persona(名字、背景、個性),存進 DB 初始化腳本。claimed-by: Claude Sonnet 5(互動 session)
 - [ ] `todo` **T0-3 互動迴圈** — CLI 對話迴圈:玩家輸入 → agent 回應(帶入 persona + 近期記憶呼叫 LLM)→ 存成記憶事件。claimed-by: -
 - [ ] `todo` **T0-4 離線時間追蹤** — 記錄玩家上次離開的時間戳;下次啟動時算經過多久。claimed-by: -
 - [ ] `todo` **T0-5 離線敘事生成** — 一次 LLM 呼叫:輸入「經過多久 + 最近記憶」,輸出「這段時間 agent 做了什麼」的敘事;存成一筆記憶事件。claimed-by: -
