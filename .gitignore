@@ -8,3 +8,6 @@ venv/
 *.sqlite3
 .env
 .DS_Store
+*.egg-info/
+build/
+dist/
