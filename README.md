@@ -24,10 +24,25 @@ Out of scope (for now): world map, multiple agents, frontend, vector search.
 
 ```
 pip install -e ".[dev]"
+python -m everliving.web      # 網頁版(建議)——會自動開瀏覽器
+```
+
+或者純命令列:
+
+```
 python -m everliving.cli
 ```
 
-安裝一次就好(`-e` 是可編輯安裝,改程式碼不用重裝)。裝完之後 `python -m everliving.cli` 在任何資料夾都能跑。
+**兩個入口跑的是同一套核心迴圈與同一個 `everliving.db`**,差別只在介面。網頁版多了一件事:一個跟著現實時間變化的港城場景(天色、潮位都會動),而潮汐正好是這個世界的時鐘。
+
+網頁版只綁 `127.0.0.1`,同網段的其他機器連不進來——這個行程握著會花錢的 API key。
+
+```
+python -m everliving.web --offline-hours 24   # 跟 CLI 同一個意思
+python -m everliving.web --port 8770 --no-browser
+```
+
+安裝一次就好(`-e` 是可編輯安裝,改程式碼不用重裝)。裝完之後在任何資料夾都能跑。
 
 > ⚠️ `everliving.db` 會建在**你執行指令的那個資料夾**。想接續同一個世界,就固定在同一個資料夾跑——換位置等於開了一個全新的世界,agent 會什麼都不記得。
 

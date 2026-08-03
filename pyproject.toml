@@ -17,9 +17,14 @@ dev = ["pytest"]
 
 [project.scripts]
 everliving = "everliving.cli:main"
+everliving-web = "everliving.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# The page is read from disk at startup, so it has to ship with the package.
+everliving = ["static/*.html"]
 
 [tool.pytest.ini_options]
 # Tests run straight from the source tree, so they work without installing first.

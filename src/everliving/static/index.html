@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; script-src 'unsafe-inline'">
+<title>陌洲</title>
+<style>
+  :root{
+    --ink:#e7e3dc; --dim:#8d8a85; --faint:#5a5854;
+    --panel:#14171a; --edge:#242a2f; --warn:#c9a227; --sea:#0d1f28;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:#0a0c0e; color:var(--ink);
+    font:16px/1.75 "Noto Serif CJK TC","Songti TC",Georgia,serif;
+    display:flex; flex-direction:column; min-height:100%;
+  }
+  .scene{position:relative;height:34vh;min-height:200px;overflow:hidden;flex:none;
+         border-bottom:1px solid var(--edge)}
+  .scene svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .place{position:absolute;left:0;right:0;bottom:10px;text-align:center;
+         font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+         letter-spacing:.35em;color:var(--dim);text-transform:none}
+  .clock{position:absolute;top:12px;right:14px;
+         font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+         letter-spacing:.18em;color:var(--faint)}
+
+  main{flex:1;width:100%;max-width:720px;margin:0 auto;padding:28px 22px 0}
+  h1{font-size:15px;font-weight:400;letter-spacing:.5em;color:var(--dim);margin:0 0 22px}
+
+  .narrative{border-left:2px solid var(--warn);padding:2px 0 2px 18px;margin:0 0 22px}
+  .narrative p{margin:0 0 12px;white-space:pre-wrap}
+  .events{list-style:none;padding:0;margin:10px 0 0}
+  .events li{font-size:14px;color:var(--dim);padding-left:14px;position:relative}
+  .events li::before{content:"·";position:absolute;left:2px;color:var(--faint)}
+
+  .readout{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 20px;padding:0;list-style:none}
+  .readout li{font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;
+              border:1px solid var(--edge);border-radius:2px;padding:4px 8px;color:var(--dim)}
+  .readout b{font-weight:400;color:var(--faint)}
+
+  .thread{border:1px solid var(--warn);border-radius:2px;padding:12px 14px;margin:0 0 24px;
+          background:rgba(201,162,39,.05)}
+  .thread .tag{font:10px/1 ui-monospace,monospace;letter-spacing:.3em;color:var(--warn);
+               display:block;margin-bottom:8px}
+
+  .log{margin:0 0 20px}
+  .turn{margin:0 0 16px}
+  .turn .who{font:10px/1 ui-monospace,monospace;letter-spacing:.3em;color:var(--faint);
+             display:block;margin-bottom:5px}
+  .turn.me p{color:var(--dim)}
+  .turn p{margin:0;white-space:pre-wrap}
+
+  form{position:sticky;bottom:0;display:flex;gap:10px;padding:16px 0 22px;
+       background:linear-gradient(transparent,#0a0c0e 22%)}
+  input{flex:1;background:var(--panel);border:1px solid var(--edge);border-radius:2px;
+        color:var(--ink);padding:11px 13px;font:inherit;font-size:15px}
+  input:focus{outline:none;border-color:var(--dim)}
+  button{background:none;border:1px solid var(--edge);border-radius:2px;color:var(--dim);
+         padding:0 16px;font:inherit;font-size:14px;cursor:pointer}
+  button:hover:not(:disabled){color:var(--ink);border-color:var(--dim)}
+  button:disabled{opacity:.4;cursor:default}
+
+  .note{color:var(--faint);font-size:13px;margin:0 0 18px}
+  .err{color:var(--warn);font-size:14px;margin:0 0 18px}
+  @media (max-width:600px){ .scene{height:26vh} main{padding:20px 16px 0} }
+</style>
+</head>
+<body>
+
+<div class="scene">
+  <svg viewBox="0 0 1000 320" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop id="skyTop" offset="0" stop-color="#0b1620"/>
+        <stop id="skyBot" offset="1" stop-color="#1d2b33"/>
+      </linearGradient>
+      <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#16323d" stop-opacity=".92"/>
+        <stop offset="1" stop-color="#08141a"/>
+      </linearGradient>
+    </defs>
+    <rect width="1000" height="320" fill="url(#sky)"/>
+    <circle id="sun" cx="780" cy="90" r="16" fill="#d8c9a3" opacity=".5"/>
+    <g id="far" opacity=".35" fill="#050a0d"></g>
+    <g id="near" fill="#04080a"></g>
+    <g id="sea">
+      <rect id="waterRect" x="0" y="240" width="1000" height="120" fill="url(#water)"/>
+      <path id="wave" d="" fill="none" stroke="#3d6b7a" stroke-width="1" opacity=".5"/>
+    </g>
+  </svg>
+  <div class="clock" id="clock"></div>
+  <div class="place" id="place">港城</div>
+</div>
+
+<main>
+  <h1 id="who">陌洲</h1>
+  <div id="boot" class="note">正在接上……</div>
+  <div id="err" class="err" hidden></div>
+
+  <section id="offline" hidden>
+    <div class="narrative">
+      <p id="narrative"></p>
+      <ul class="events" id="events"></ul>
+    </div>
+  </section>
+
+  <ul class="readout" id="readout"></ul>
+
+  <div class="thread" id="thread" hidden>
+    <span class="tag">有件事在等你</span>
+    <span id="threadText"></span>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <form id="form">
+    <input id="msg" autocomplete="off" placeholder="說點什麼……" disabled>
+    <button id="send" disabled>說</button>
+  </form>
+</main>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const post = (path, body) => fetch(path, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body || {})
+  }).then(r => r.json());
+
+  /* ---- scene: sky, tide and silhouettes all follow the real clock ---- */
+  const SKY = [
+    [0 , '#070d14','#0e1a22'], [5 , '#101a26','#2a2f33'], [7 , '#2b3a44','#6b6a5f'],
+    [11, '#3f5a68','#7d8b8c'], [16, '#4a5560','#8a7f6c'], [19, '#2a2d3a','#6b4a3c'],
+    [21, '#0d1420','#1b2430'], [24, '#070d14','#0e1a22'],
+  ];
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  function mix(c1,c2,t){
+    const p=c=>[1,3,5].map(i=>parseInt(c.substr(i,2),16));
+    const [r1,g1,b1]=p(c1),[r2,g2,b2]=p(c2);
+    const h=v=>Math.round(v).toString(16).padStart(2,'0');
+    return '#'+h(lerp(r1,r2,t))+h(lerp(g1,g2,t))+h(lerp(b1,b2,t));
+  }
+  function skyFor(hour){
+    for(let i=0;i<SKY.length-1;i++){
+      const [h0,t0,b0]=SKY[i],[h1,t1,b1]=SKY[i+1];
+      if(hour>=h0&&hour<=h1){
+        const t=(hour-h0)/(h1-h0);
+        return [mix(t0,t1,t), mix(b0,b1,t)];
+      }
+    }
+    return [SKY[0][1],SKY[0][2]];
+  }
+  // A crude semidiurnal tide: two highs a day. Cheap, and it moves — which is the point.
+  const tideAt = mins => Math.sin(mins/745*2*Math.PI)*0.5+0.5;
+
+  const SKYLINE = {
+    '港城':  [[60,150,70,90],[140,170,50,70],[200,120,90,120],[300,160,60,80],[380,100,110,140],[500,150,80,90],[600,130,70,110],[690,170,100,70],[800,140,60,100],[880,165,90,75]],
+    '工作間':[[40,60,300,260],[360,120,60,140],[440,150,240,110],[700,90,240,170]],
+    '回收場':[[40,200,120,60],[150,180,90,80],[250,210,160,50],[420,170,70,90],[500,205,200,55],[720,185,120,75],[850,200,130,60]],
+    '潮線':  [[820,190,60,70],[900,205,70,55]],
+    '配電所':[[120,110,90,150],[230,80,40,180],[290,130,150,130],[460,100,50,160],[530,140,120,120],[680,95,180,165]],
+    '機器廠':[[30,80,220,180],[270,50,180,210],[470,90,260,170],[750,60,230,200]],
+  };
+  function silhouettes(scene){
+    const near=$('near'), far=$('far');
+    near.textContent=''; far.textContent='';
+    const boxes = SKYLINE[scene] || SKYLINE['港城'];
+    boxes.forEach(([x,y,w,h],i)=>{
+      const r=document.createElementNS('http://www.w3.org/2000/svg','rect');
+      r.setAttribute('x',x); r.setAttribute('y',y);
+      r.setAttribute('width',w); r.setAttribute('height',h);
+      (i%3===0?far:near).appendChild(r);
+    });
+  }
+  function drawScene(scene){
+    const now=new Date();
+    const hour=now.getHours()+now.getMinutes()/60;
+    const [top,bot]=skyFor(hour);
+    $('skyTop').setAttribute('stop-color',top);
+    $('skyBot').setAttribute('stop-color',bot);
+    $('sun').setAttribute('cy', 300-Math.max(0,Math.sin((hour-6)/12*Math.PI))*250);
+    $('sun').setAttribute('opacity', hour>5&&hour<20 ? .45 : .12);
+
+    const tide=tideAt(now.getHours()*60+now.getMinutes());
+    const level=252-tide*34;
+    $('waterRect').setAttribute('y',level);
+    let d='M0 '+level.toFixed(1);
+    for(let x=0;x<=1000;x+=25){
+      d+=' L'+x+' '+(level+Math.sin((x/70)+now.getMinutes()/9)*2.2).toFixed(1);
+    }
+    $('wave').setAttribute('d',d);
+
+    $('clock').textContent =
+      now.toTimeString().slice(0,5) + (tide>0.5?'  漲潮':'  退潮');
+    $('place').textContent = scene;
+    silhouettes(scene);
+  }
+
+  let currentScene='港城';
+  drawScene(currentScene);
+  setInterval(()=>drawScene(currentScene), 30000);
+
+  /* ---- rendering. Everything the model wrote goes in as text, never as markup ---- */
+  function readout(state){
+    const ul=$('readout'); ul.textContent='';
+    Object.entries(state||{}).forEach(([k,v])=>{
+      const li=document.createElement('li');
+      const b=document.createElement('b'); b.textContent=k+' ';
+      li.appendChild(b); li.appendChild(document.createTextNode(v));
+      ul.appendChild(li);
+    });
+  }
+  function threads(list){
+    const box=$('thread');
+    if(!list || !list.length){ box.hidden=true; return; }
+    $('threadText').textContent = list[0];
+    box.hidden=false;
+  }
+  function turn(who, text, mine){
+    const d=document.createElement('div'); d.className='turn'+(mine?' me':'');
+    const s=document.createElement('span'); s.className='who'; s.textContent=who;
+    const p=document.createElement('p'); p.textContent=text;
+    d.appendChild(s); d.appendChild(p); $('log').appendChild(d);
+    d.scrollIntoView({behavior:'smooth', block:'end'});
+  }
+  function fail(msg){ $('err').textContent=msg; $('err').hidden=false; }
+
+  function apply(data){
+    if(data.error){ fail(data.error); return false; }
+    readout(data.state); threads(data.threads);
+    if(data.scene){ currentScene=data.scene; drawScene(currentScene); }
+    return true;
+  }
+
+  /* ---- boot ---- */
+  post('/api/open').then(data=>{
+    $('boot').hidden=true;
+    if(!apply(data)) return;
+    $('who').textContent = data.name || '陌洲';
+    document.title = data.name || '陌洲';
+    if(data.offline){
+      $('narrative').textContent = data.offline.narrative;
+      const ul=$('events'); ul.textContent='';
+      (data.offline.events||[]).forEach(e=>{
+        const li=document.createElement('li'); li.textContent=e; ul.appendChild(li);
+      });
+      $('offline').hidden=false;
+    }
+    $('msg').disabled=false; $('send').disabled=false; $('msg').focus();
+  }).catch(()=>{ $('boot').hidden=true; fail('接不上伺服器,它還開著嗎?'); });
+
+  /* ---- talking ---- */
+  $('form').addEventListener('submit', ev=>{
+    ev.preventDefault();
+    const text=$('msg').value.trim();
+    if(!text) return;
+    turn('你', text, true);
+    $('msg').value=''; $('msg').disabled=true; $('send').disabled=true;
+    post('/api/say',{message:text}).then(data=>{
+      if(apply(data) && data.reply) turn($('who').textContent, data.reply, false);
+    }).catch(()=>fail('沒送出去。')).finally(()=>{
+      $('msg').disabled=false; $('send').disabled=false; $('msg').focus();
+    });
+  });
+
+  // Mark the departure so the next visit knows how long you were gone.
+  addEventListener('pagehide', ()=>{
+    navigator.sendBeacon('/api/leave', new Blob(['{}'],{type:'application/json'}));
+  });
+})();
+</script>
+</body>
+</html>

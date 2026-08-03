@@ -28,6 +28,15 @@ def is_worth_simulating(elapsed: timedelta | None, minimum: timedelta = MIN_OFFL
     return elapsed is not None and elapsed >= minimum
 
 
+#: Where a narrative took place. A closed vocabulary on purpose: the display side
+#: has one drawing per scene, so a value it doesn't know about would render nothing.
+#: The model picks from this list rather than inventing places, which also keeps it
+#: from quietly adding geography (generating places is the expensive kind — see the
+#: design doc on rings).
+SCENES = ("工作間", "回收場", "潮線", "配電所", "機器廠", "港城")
+DEFAULT_SCENE = "港城"
+
+
 @dataclass
 class OfflineResult:
     narrative: str
@@ -35,6 +44,7 @@ class OfflineResult:
     state_changes: dict[str, str] = field(default_factory=dict)
     open_thread: str | None = None
     resolved_thread_ids: list[int] = field(default_factory=list)
+    scene: str = DEFAULT_SCENE
 
 
 def time_since_last_seen(
@@ -108,12 +118,17 @@ def parse_offline_response(raw: str) -> OfflineResult:
             except (TypeError, ValueError):
                 continue
 
+    scene = str(parsed.get("scene") or "").strip()
+    if scene not in SCENES:  # an unknown place would draw nothing at all
+        scene = DEFAULT_SCENE
+
     return OfflineResult(
         narrative=narrative,
         events=events,
         state_changes=state_changes,
         open_thread=open_thread,
         resolved_thread_ids=resolved_thread_ids,
+        scene=scene,
     )
 
 
@@ -142,7 +157,8 @@ def _build_prompts(
         '  "events": ["具體發生的事,一句一件"],\n'
         '  "state_changes": {"中文狀態名": "中文的新值"},\n'
         '  "open_thread": "需要玩家回應的懸念,或 null",\n'
-        '  "resolved_thread_ids": [已解決的既有事項 id]\n'
+        '  "resolved_thread_ids": [已解決的既有事項 id],\n'
+        f'  "scene": "這段敘事主要發生在哪,只能從這幾個選一個:{"、".join(SCENES)}"\n'
         "}"
     )
 
