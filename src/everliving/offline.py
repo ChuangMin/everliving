@@ -16,6 +16,18 @@ from everliving import db
 from everliving.llm import LLMClient, log_usage
 
 
+#: Below this, "you were away" isn't true enough to be worth a story.
+#: Without a floor, quitting and relaunching immediately fires a full simulation —
+#: which bills an LLM call, invents a whole offline period, and adds a thread for an
+#: absence of thirty seconds. That's a cost hole as much as a narrative one.
+MIN_OFFLINE_GAP = timedelta(minutes=30)
+
+
+def is_worth_simulating(elapsed: timedelta | None, minimum: timedelta = MIN_OFFLINE_GAP) -> bool:
+    """Whether a gap is long enough that something could plausibly have happened."""
+    return elapsed is not None and elapsed >= minimum
+
+
 @dataclass
 class OfflineResult:
     narrative: str

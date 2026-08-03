@@ -16,7 +16,11 @@ from everliving.llm import (
     LLMUnavailable,
     make_client,
 )
-from everliving.offline import simulate_offline_period, time_since_last_seen
+from everliving.offline import (
+    is_worth_simulating,
+    simulate_offline_period,
+    time_since_last_seen,
+)
 
 DB_PATH = "everliving.db"
 
@@ -110,7 +114,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         elapsed = time_since_last_seen(conn, agent_id)
 
-    if elapsed is not None:
+    if is_worth_simulating(elapsed):
         try:
             result = simulate_offline_period(conn, agent_id, llm, elapsed)
         except LLMAuthError as exc:

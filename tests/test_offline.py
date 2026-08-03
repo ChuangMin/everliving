@@ -4,8 +4,10 @@ import pytest
 
 from everliving import db, persona
 from everliving.offline import (
+    MIN_OFFLINE_GAP,
     _format_duration,
     generate_offline_narrative,
+    is_worth_simulating,
     time_since_last_seen,
 )
 
@@ -67,3 +69,11 @@ def test_generate_offline_narrative_prompt_includes_duration_and_memory(conn, fa
 def test_generate_offline_narrative_unknown_agent_raises(conn, fake_llm):
     with pytest.raises(ValueError):
         generate_offline_narrative(conn, 999, fake_llm, timedelta(hours=1))
+
+
+def test_is_worth_simulating_needs_a_real_gap():
+    assert not is_worth_simulating(None)
+    assert not is_worth_simulating(timedelta(seconds=30))
+    assert not is_worth_simulating(MIN_OFFLINE_GAP - timedelta(seconds=1))
+    assert is_worth_simulating(MIN_OFFLINE_GAP)
+    assert is_worth_simulating(timedelta(hours=24))
