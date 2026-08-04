@@ -2,10 +2,40 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
+from dataclasses import dataclass
 
 from everliving import db
 from everliving.llm import LLMClient, log_usage
+from everliving.offline import SCENES
+
+#: The stage direction at the end of a reply. Not dialogue — it never reaches the
+#: player, and it must never reach memory either, or the next turn feeds it back as
+#: something 陌洲 said.
+_SCENE_TAG = re.compile(r"\n*場景[:：]\s*(\S+)\s*$")
+
+
+@dataclass
+class Turn:
+    """One exchange. More than the reply, because the display side needs to know
+    where he is now, and story assets need something to hang on."""
+
+    reply: str
+    #: Where he is after this turn, or None for "leave the picture where it is".
+    scene: str | None = None
+    #: The `memory_events` row holding the reply — the anchor for a clip or a page.
+    event_id: int | None = None
+
+
+def split_scene_tag(raw: str) -> tuple[str, str | None]:
+    """Pull the trailing scene tag off a reply, if it wrote one we can draw."""
+    match = _SCENE_TAG.search(raw)
+    if not match:
+        return raw.strip(), None
+    scene = match.group(1)
+    # An unknown place would draw nothing, so hold the current picture instead.
+    return raw[: match.start()].strip(), scene if scene in SCENES else None
 
 
 def build_system_prompt(agent: dict, has_open_threads: bool = False) -> str:
@@ -14,6 +44,11 @@ def build_system_prompt(agent: dict, has_open_threads: bool = False) -> str:
         f"個性:{agent['personality']}\n"
         "用符合這個角色的語氣和邏輯,以第一人稱回應玩家的訊息。"
         "回覆簡短(1-3 句)、有畫面感,不要用條列或客套開場白。"
+        # The picture used to sit wherever the last offline period left it while he
+        # talked about being somewhere else. One line costs a few tokens and keeps
+        # the scene honest to the words.
+        "\n回覆結束後另起一行寫 `場景:X`,X 只能從這幾個選一個:"
+        f"{'、'.join(SCENES)}。那一行是給畫面用的,不是講給玩家聽的。"
     )
     if has_open_threads:
         # Without this the agent never surfaces what it's waiting on, and the
@@ -37,7 +72,7 @@ def respond(
     llm: LLMClient,
     player_message: str,
     memory_limit: int = 10,
-) -> str:
+) -> Turn:
     agent = db.get_agent(conn, agent_id)
     if agent is None:
         raise ValueError(f"unknown agent_id={agent_id}")
@@ -63,10 +98,12 @@ def respond(
     sections.append(f"玩家對你說:{player_message}")
     user_message = "\n\n".join(sections)
 
-    reply = llm.complete(system_prompt, user_message)
+    raw = llm.complete(system_prompt, user_message)
     log_usage(conn, llm, agent_id, purpose="conversation")
 
-    db.add_memory_event(conn, agent_id, kind="raw", content=f"玩家說:{player_message}")
-    db.add_memory_event(conn, agent_id, kind="raw", content=f"我回答:{reply}")
+    reply, scene = split_scene_tag(raw)
 
-    return reply
+    db.add_memory_event(conn, agent_id, kind="raw", content=f"玩家說:{player_message}")
+    event_id = db.add_memory_event(conn, agent_id, kind="raw", content=f"我回答:{reply}")
+
+    return Turn(reply=reply, scene=scene, event_id=event_id)

@@ -124,9 +124,18 @@ class Session:
     def say(self, message: str) -> dict:
         conn = self._connect()
         try:
-            reply = respond(conn, self.agent_id, self.llm, message)
+            turn = respond(conn, self.agent_id, self.llm, message)
             payload = self.snapshot(conn)
-            payload["reply"] = reply
+            payload["reply"] = turn.reply
+            # Only sent when he actually named somewhere we can draw; the page leaves
+            # the picture alone otherwise rather than cutting to a default.
+            if turn.scene:
+                payload["scene"] = turn.scene
+            payload["event_id"] = turn.event_id
+            payload["assets"] = [
+                {"kind": a["kind"], "ref": a["ref"]}
+                for a in db.get_assets(conn, turn.event_id)
+            ]
             return payload
         finally:
             conn.close()

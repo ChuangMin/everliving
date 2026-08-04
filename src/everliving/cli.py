@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> None:
             if not player_message:
                 continue
             try:
-                reply = respond(conn, agent_id, llm, player_message)
+                reply = respond(conn, agent_id, llm, player_message).reply
             except LLMAuthError as exc:
                 _exit_no_credentials(exc)
             except LLMUnavailable as exc:
