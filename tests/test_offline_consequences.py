@@ -74,6 +74,39 @@ def test_simulation_persists_state_events_and_thread(conn):
     assert "offline_event" in kinds
 
 
+def test_the_result_carries_the_id_of_the_beat_it_wrote(conn):
+    """The narrative row's id is the anchor every story asset hangs on (a clip, a
+    still, a page). The simulation was writing that row and throwing the id away,
+    which left the display side with no way to ever point at a specific beat."""
+    agent_id = persona.seed_default_agent(conn)
+    llm = FakeLLMClient(reply=_response())
+
+    result = simulate_offline_period(conn, agent_id, llm, timedelta(days=1))
+
+    assert result.narrative_event_id is not None
+    row = conn.execute(
+        "SELECT kind, content FROM memory_events WHERE id = ?",
+        (result.narrative_event_id,),
+    ).fetchone()
+    assert row["kind"] == "offline_narrative"
+    assert row["content"] == result.narrative
+
+
+def test_an_asset_can_be_hung_on_the_beat_the_simulation_just_wrote(conn):
+    """End to end: the reservation is only real if a beat produced by a real run can
+    actually carry a clip."""
+    agent_id = persona.seed_default_agent(conn)
+    result = simulate_offline_period(
+        conn, agent_id, FakeLLMClient(reply=_response()), timedelta(days=1)
+    )
+
+    db.attach_asset(conn, result.narrative_event_id, kind="video", ref="clips/夜.webm")
+
+    assert [a["ref"] for a in db.get_assets(conn, result.narrative_event_id)] == [
+        "clips/夜.webm"
+    ]
+
+
 def test_existing_state_and_threads_are_fed_back_into_the_prompt(conn):
     """Continuity is the point: the next offline period must know what already happened."""
     agent_id = persona.seed_default_agent(conn)

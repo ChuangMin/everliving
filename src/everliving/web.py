@@ -103,6 +103,14 @@ class Session:
                     "state_changes": result.state_changes,
                     "open_thread": result.open_thread,
                     "scene": result.scene,
+                    # The anchor for anything that later illustrates this beat. Sent
+                    # now, while it's free, so the display side never has to identify
+                    # a beat by matching its prose.
+                    "event_id": result.narrative_event_id,
+                    "assets": [
+                        {"kind": a["kind"], "ref": a["ref"]}
+                        for a in db.get_assets(conn, result.narrative_event_id)
+                    ],
                 }
             self.opened = True
 

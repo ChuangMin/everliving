@@ -55,6 +55,10 @@ class OfflineResult:
     open_thread: str | None = None
     resolved_thread_ids: list[int] = field(default_factory=list)
     scene: str = DEFAULT_SCENE
+    #: The `memory_events` row this narrative was stored as — the anchor a video, a
+    #: still or a written page attaches to later (see the design doc, 第五節). None
+    #: when the result was parsed but never persisted.
+    narrative_event_id: int | None = None
 
 
 def time_since_last_seen(
@@ -219,7 +223,12 @@ def simulate_offline_period(
     log_usage(conn, llm, agent_id, purpose="offline_narrative")
     result = parse_offline_response(raw)
 
-    db.add_memory_event(conn, agent_id, kind="offline_narrative", content=result.narrative)
+    # Keep the id: this row is what story assets hang on, and it can only be captured
+    # here — reconstructing "which beat was that" from the text afterwards is exactly
+    # the fragile matching the design doc rules out.
+    result.narrative_event_id = db.add_memory_event(
+        conn, agent_id, kind="offline_narrative", content=result.narrative
+    )
     for event in result.events:
         db.add_memory_event(conn, agent_id, kind="offline_event", content=event)
     for key, value in result.state_changes.items():

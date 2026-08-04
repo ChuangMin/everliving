@@ -58,6 +58,22 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     output_tokens INTEGER NOT NULL,
     created_at TEXT NOT NULL
 );
+
+-- Video, stills, written pages: anything that illustrates one narrative beat.
+-- Empty for a long time by design — the point is that the anchor exists before the
+-- assets do, because retrofitting one afterwards means rewriting history.
+--
+-- Keyed by memory_events.id and never by the narrative text. The text gets retold and
+-- compressed as the agent remembers it (see the design doc on memory wear), so an
+-- asset tied to wording would drift away from the moment it depicts. The player's
+-- evidence has to stay pinned to the source row, which is never rewritten.
+CREATE TABLE IF NOT EXISTS story_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memory_event_id INTEGER NOT NULL REFERENCES memory_events(id),
+    kind TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -105,6 +121,31 @@ def add_memory_event(
     )
     conn.commit()
     return cur.lastrowid
+
+
+def attach_asset(
+    conn: sqlite3.Connection, memory_event_id: int, kind: str, ref: str
+) -> int:
+    """Hang a clip, a still or a page on one narrative beat.
+
+    `ref` is a pointer (a path or a URL), not the bytes: assets are pre-generated and
+    reusable, so the same file can serve many beats and the database stays small.
+    """
+    cur = conn.execute(
+        "INSERT INTO story_assets (memory_event_id, kind, ref, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (memory_event_id, kind, ref, _now()),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_assets(conn: sqlite3.Connection, memory_event_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM story_assets WHERE memory_event_id = ? ORDER BY id",
+        (memory_event_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def get_recent_memory(conn: sqlite3.Connection, agent_id: int, limit: int = 20) -> list[dict]:
