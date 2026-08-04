@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-08-04 — 誠實性檢查:`done` 的東西真的跑得動,H-1 技術上沒有東西擋著了
+
+Agent: Claude Opus 5(互動 session)
+
+**沒有新功能,也沒有新任務。** `TASKS.md` 的 `todo` 是空的、下一步卡在 H-1(人類專屬),
+按 `AGENTS.md` 這時候唯一該做的是 planner 那條:**檢查標 `done` 的東西是不是真的跑得動**。
+以下每一條都是這個 session 實際跑出來的輸出,不是沿用上一則記錄的說法:
+
+- `python -m pytest -q` → **104 passed**(與上一則記錄宣稱的數字一致)
+- `python -m everliving.web --no-browser --port 8771` 實際啟動,curl 驗證:
+  首頁 `200`、未知路徑 `404`、`POST /api/open` `200`。驗完已關掉,port 清乾淨
+
+**兩件下一個 agent / 人類需要先知道的事實(都會影響 H-1 怎麼跑):**
+
+1. **`everliving.db` 目前是乾淨的**——`memory_events` 0 筆、`agent_state` 0 筆、
+   `open_threads` 0 筆、`llm_calls` **0 筆**。也就是說 **H-1 從來沒有被真的跑過一次**,
+   而且 H-1 會是從零開始的第一手體驗(不會讀到舊 playtest 的殘留)。
+   附帶結論:這個 session 的 `POST /api/open` **沒有花到任何一毛錢**——
+   `llm_calls` 是 0 筆,`offline` 回 `null`(還沒有 `last_seen`,沒有離線期間可模擬)
+2. **`ANTHROPIC_API_KEY` 與 `GROQ_API_KEY` 都有值**(只驗長度,沒有印出內容)。
+   所以 H-1 第 1 步不會卡在「沒有 key」
+
+**結論:H-1 技術上沒有東西擋著了,剩下的是人要不要打開它。** 這不是新的阻塞,
+是同一個阻塞被確認為「純粹等人」——`AGENTS.md` 說「今天沒有事該做是一個正確的結果」,今天就是。
+
+**待人決定**:H-1(跑法見 `TASKS.md`);舊 commit 的 history 重寫指令仍待執行。
+
+---
+
 ## 2026-08-03 — 配樂、記憶磨損、現實資料快照(只動文件)
 
 Agent: Claude Opus 5(互動 session)
