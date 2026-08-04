@@ -83,6 +83,38 @@ def test_say_returns_the_reply_and_the_current_state(session):
     assert "state" in payload and "threads" in payload
 
 
+def test_autoplay_runs_a_turn_and_reports_both_sides(session):
+    session.fake.reply = "在忙嗎?"
+    payload = session.auto_turn()
+
+    assert payload["visitor"] == "在忙嗎?"
+    assert payload["reply"] == "在忙嗎?"       # same fake on both sides of the seat
+    assert payload["auto"]["used"] == 1
+
+
+def test_autoplay_stops_at_the_cap(session):
+    """Each auto turn is two LLM calls and the loop drives itself, so an uncapped
+    autoplay is a denial-of-wallet path aimed at the owner's own key."""
+    session.auto_cap = 2
+    session.auto_turn()
+    session.auto_turn()
+
+    payload = session.auto_turn()
+    assert payload["auto"]["used"] == 2         # the third never ran
+    assert payload["auto"]["remaining"] == 0
+    assert "上限" in payload["error"]
+
+
+def test_autoplay_turns_are_billed_separately_from_a_real_player(session):
+    session.fake.last_usage = {"model": "m", "input_tokens": 5, "output_tokens": 3}
+    session.auto_turn()
+
+    conn = db.get_connection(session.db_path)
+    purposes = sorted(r["purpose"] for r in conn.execute("SELECT purpose FROM llm_calls"))
+    conn.close()
+    assert purposes == ["auto_visitor", "conversation"]
+
+
 def test_the_workbench_counts_nights_events_and_exchanges(session):
     """The panel leads with nights he lived through without you, because that is the
     number the whole bet rests on."""

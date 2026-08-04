@@ -18,7 +18,8 @@ const html = fs.readFileSync(
 let js = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 js = js.replace(/\}\)\(\);\s*$/,
   '; globalThis.__draw = drawScene; globalThis.__apply = apply;' +
-  '  globalThis.__bench = bench; globalThis.__setBench = setBench; })();');
+  '  globalThis.__bench = bench; globalThis.__setBench = setBench;' +
+  '  globalThis.__setAuto = setAuto; globalThis.__turn = turn; })();');
 
 let created = 0;
 const nodes = new Map();
@@ -98,6 +99,22 @@ try {
         && nodes.get('benchThreads').children.length === 0,
         'workbench empties instead of showing stale rows');
 } catch (e) { check(false, `workbench threw: ${e.message}`); }
+
+// Handing the seat to an agent, and taking it back. The loop itself can't run here
+// (fetch never resolves), which is the point: toggling must be safe on its own.
+try {
+  globalThis.__setAuto(true);
+  const onLabel = nodes.get('autoBtn').textContent;
+  const inputLocked = nodes.get('msg').hidden === undefined ? true : true;
+  globalThis.__setAuto(false);
+  const offLabel = nodes.get('autoBtn').textContent;
+  check(onLabel === '停止代打' && offLabel === '讓 AI 代打',
+        `autoplay switch toggles its label (${onLabel} / ${offLabel})`);
+
+  globalThis.__turn('訪客(AI)', '最近潮位怎麼樣?', true, [{kind:'video', ref:'clips/a.webm'}]);
+  const last = nodes.get('log').children.slice(-1)[0];
+  check(last && last.children.length === 3, 'an agent turn renders with its assets beside it');
+} catch (e) { check(false, `autoplay switch threw: ${e.message}`); }
 
 // A payload carrying an error must not also try to redraw with missing fields.
 try {

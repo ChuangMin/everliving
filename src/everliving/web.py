@@ -29,7 +29,7 @@ from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from everliving import db, logs, persona
+from everliving import db, logs, persona, visitor
 from everliving.agent_loop import respond
 from everliving.config import load_dotenv
 from everliving.llm import (
@@ -59,11 +59,21 @@ _log = logs.get_logger("web")
 class Session:
     """Everything a request needs, built once at startup."""
 
-    def __init__(self, db_path: str, provider: str | None, offline_hours: float | None):
+    def __init__(
+        self,
+        db_path: str,
+        provider: str | None,
+        offline_hours: float | None,
+        auto_cap: int = 6,
+    ):
         self.db_path = db_path
         self.llm = make_client(provider)
         self.offline_hours = offline_hours
         self.opened = False
+        # Per server run, not per day: a runaway autoplay should never outlive the
+        # process you can see in front of you.
+        self.auto_cap = auto_cap
+        self.auto_used = 0
 
         conn = self._connect()
         try:
@@ -164,6 +174,53 @@ class Session:
         finally:
             conn.close()
 
+    def auto_turn(self) -> dict:
+        """One turn with an agent in the player's seat: it speaks, then he answers.
+
+        Capped, and the cap is the point. Two LLM calls per turn and the loop drives
+        itself, so without a ceiling this is a denial-of-wallet path pointed at
+        whoever's key is in `.env`. The cap is per server run, so stopping it is
+        always as easy as Ctrl-C.
+        """
+        if self.auto_used >= self.auto_cap:
+            return {
+                **self.snapshot_only(),
+                "error": f"自動遊玩已達這次啟動的上限({self.auto_cap} 輪)。重開一次就重置。",
+                "auto": {"used": self.auto_used, "remaining": 0, "cap": self.auto_cap},
+            }
+
+        conn = self._connect()
+        try:
+            message = visitor.next_message(conn, self.agent_id, self.llm)
+            turn = respond(conn, self.agent_id, self.llm, message)
+            self.auto_used += 1
+
+            payload = self.snapshot(conn)
+            payload["visitor"] = message
+            payload["reply"] = turn.reply
+            if turn.scene:
+                payload["scene"] = turn.scene
+            payload["event_id"] = turn.event_id
+            payload["assets"] = [
+                {"kind": a["kind"], "ref": a["ref"]}
+                for a in db.get_assets(conn, turn.event_id)
+            ]
+            payload["auto"] = {
+                "used": self.auto_used,
+                "remaining": self.auto_cap - self.auto_used,
+                "cap": self.auto_cap,
+            }
+            return payload
+        finally:
+            conn.close()
+
+    def snapshot_only(self) -> dict:
+        conn = self._connect()
+        try:
+            return self.snapshot(conn)
+        finally:
+            conn.close()
+
     def leave(self) -> dict:
         conn = self._connect()
         try:
@@ -204,7 +261,8 @@ def _make_handler(session: Session):
                 self._json(404, {"error": "not found"})
 
         def do_POST(self):
-            routes = {"/api/open": self._open, "/api/say": self._say, "/api/leave": self._leave}
+            routes = {"/api/open": self._open, "/api/say": self._say,
+                      "/api/leave": self._leave, "/api/auto": self._auto}
             handler = routes.get(self.path)
             if handler is None:
                 self._json(404, {"error": "not found"})
@@ -254,6 +312,9 @@ def _make_handler(session: Session):
                 return {"error": "說點什麼吧"}
             return session.say(message)
 
+        def _auto(self, body):
+            return session.auto_turn()
+
         def _leave(self, body):
             return session.leave()
 
@@ -272,6 +333,13 @@ def _parse_args(argv):
         help="假裝你已經離開 N 小時(playtest 用,跟 CLI 同一個意思)。",
     )
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument(
+        "--auto-turns",
+        type=int,
+        default=6,
+        metavar="N",
+        help="讓 AI 代打的上限輪數(每輪兩次 LLM 呼叫,所以有上限)。",
+    )
     parser.add_argument(
         "--log-file",
         default=logs.LOG_FILENAME,
@@ -293,7 +361,9 @@ def main(argv=None) -> None:
     )
 
     try:
-        session = Session("everliving.db", args.provider, args.offline_hours)
+        session = Session(
+            "everliving.db", args.provider, args.offline_hours, auto_cap=args.auto_turns
+        )
     except (LLMAuthError, LLMUnavailable) as exc:
         # This is where a dead key lands. It used to be visible only as a red string
         # in the browser, so a failed playtest left nothing to diagnose afterwards.
