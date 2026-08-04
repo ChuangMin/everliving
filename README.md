@@ -62,13 +62,14 @@ $env:ANTHROPIC_API_KEY = "sk-ant-..."
 
 ### 換供應商 / Switching providers
 
-不想被單一帳號的額度卡住的話,還有兩個選擇。**注意 `grok` 和 `groq` 是不同的服務,名字只差一個字母**:
+不想被單一帳號的額度卡住的話,還有幾個選擇。**注意 `grok` 和 `groq` 是不同的服務,名字只差一個字母**:
 
 | provider | 是什麼 | 需要的環境變數 |
 |---|---|---|
 | `anthropic` | Claude(預設) | `ANTHROPIC_API_KEY` |
 | `groq` | Groq —— 高速跑開源模型的推論服務,有免費額度 | `GROQ_API_KEY` |
 | `grok` | xAI 的 Grok 模型 | `XAI_API_KEY` |
+| `ollama` | 本機 Ollama —— **不用 key、不用網路、每次呼叫 $0** | (不需要) |
 
 ```powershell
 $env:GROQ_API_KEY = "gsk_..."
@@ -78,6 +79,20 @@ python -m everliving.cli --provider groq
 或設 `EVERLIVING_PROVIDER=groq` 省掉每次打參數。模型 ID 用 `EVERLIVING_MODEL` 覆蓋——各家的 ID 會變,404 的時候去對應的 console 查目前有哪些。
 
 **Groq 上的模型實測**(用真的離線模擬 prompt 比較過,見 `PROGRESS.md`):`qwen/qwen3.6-27b` 的繁中文筆和懸念設計明顯最好,所以是預設值。`openai/gpt-oss-120b` 可用但狀態鍵名會跑成英文;`llama-3.3-70b-versatile` 敘事偏流水帳。
+
+**本機 Ollama**(`--provider ollama`)是唯一**不會因為帳號問題而壞掉**的路:沒有 key、沒有帳單、沒有過期。
+先確定 Ollama 在跑(`ollama serve`),然後:
+
+```powershell
+ollama pull qwen3.6            # 預設值;或用你已經有的模型
+python -m everliving.web --provider ollama
+```
+
+模型用 `EVERLIVING_MODEL` 或 `--provider ollama` 搭配環境變數換掉,例如 `$env:EVERLIVING_MODEL = "qwen2.5:7b"`。
+
+**取捨要先知道**:大模型跑在 CPU 上會非常慢(`ollama ps` 的 `size_vram: 0` 就表示沒吃到 GPU)。
+一次離線敘事要等好幾分鐘的話,**它會變成跟壞掉的 API key 一樣的門檻**——H-1 就是被門檻擋掉的,
+所以寧可換小模型把速度換回來。文筆跟慢到不想開之間,這個專案已經知道哪一個先殺死測試。
 
 **選擇一律是明示的,不會自動偵測**:偷偷換模型等於偷偷改變 playtest 在量什麼。
 

@@ -59,6 +59,13 @@
       注意:原本有個測試正好在**斷言這個 bug 的行為**(立刻重開就該看到敘事),已改成把 `last_seen`
       往前調再測,這樣測的是真實路徑而不是旗標。
 
+- [x] `done` **T0-13 本機 Ollama provider** — 2026-08-04 完成(claimed-by: Claude Opus 5)。
+      `.env` 裡的 `ANTHROPIC_API_KEY` 實際打出去是 **401 invalid**,H-1 第 1 步直接開不起來——
+      這是第二次被「門檻」而不是「內容」擋住,跟當初沒有畫面是同一類問題。
+      `--provider ollama` 走本機 Ollama:**不用 key、不用網路、每次呼叫 $0**,
+      所以帳號問題再也不能擋住 playtest。實作只是 `OPENAI_COMPATIBLE` 多一筆
+      (`key_env: None` 代表免金鑰),沒有新的 client 類別——用的是既有的可替換邊界。
+
 - [x] `done` **T0-11 離線期間產生後果** — 離線模擬改成結構化輸出:狀態變化寫進 `agent_state`、
       懸念寫進 `open_threads`、事件各存一筆記憶;下次對話會把狀態與懸念帶進 prompt,
       agent 會主動提起在等玩家的事。JSON 解析失敗時退化成純敘事(不會弄丟玩家要讀的東西)
@@ -67,6 +74,9 @@
 
 - [ ] **H-1 真人 playtest** — 這是里程碑 0 唯一的成敗判準。
       **2026-08-03 起改用網頁版跑**——純 CLI 的門檻讓這個測試根本開始不了(見上方「目前卡在哪」)。
+      **2026-08-04:`.env` 的 `ANTHROPIC_API_KEY` 打出去是 401 invalid。** 換一把有效的 key,
+      或者直接每行都加 `--provider ollama` 走本機模型(不用 key、$0,見下方實測數字)。
+
       每一步跑完就關掉瀏覽器分頁、在終端機 Ctrl-C,然後跑下一行:
 
       1. `python -m everliving.web` — 聊幾句。**答應它一件事**,第 4 步才好判斷

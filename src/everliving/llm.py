@@ -13,7 +13,7 @@ from typing import Protocol
 
 from everliving import db
 
-PROVIDERS = ("anthropic", "grok", "groq")
+PROVIDERS = ("anthropic", "grok", "groq", "ollama")
 DEFAULT_PROVIDER = "anthropic"
 
 # Cheap default so casual dev/playtest sessions don't rack up cost. Override with
@@ -36,10 +36,23 @@ OPENAI_COMPATIBLE = {
         "default_model": "qwen/qwen3.6-27b",
         "label": "Groq",
     },
+    # Ollama on this machine. `key_env: None` marks it keyless — nothing authenticates
+    # because nothing leaves the box. That also makes it the only provider that can't
+    # fail with a billing or expired-key error, which is why it's the playtest default
+    # of last resort: a dead API key must not be able to block H-1 a second time.
+    # Free per call, so it's also the only way to measure the loop without spending.
+    "ollama": {
+        "base_url": "http://127.0.0.1:11434/v1",
+        "key_env": None,
+        "default_model": "qwen3.6:latest",
+        "label": "Ollama(本機)",
+    },
 }
 
 GROK_BASE_URL = OPENAI_COMPATIBLE["grok"]["base_url"]
 DEFAULT_GROK_MODEL = OPENAI_COMPATIBLE["grok"]["default_model"]
+OLLAMA_BASE_URL = OPENAI_COMPATIBLE["ollama"]["base_url"]
+DEFAULT_OLLAMA_MODEL = OPENAI_COMPATIBLE["ollama"]["default_model"]
 
 # A ceiling, not a spend — you're only billed for what's actually generated, so this
 # is set well above the 2-4 sentences a reply needs. The headroom matters for models
@@ -199,11 +212,18 @@ class OpenAICompatibleClient:
         self._openai = openai
         self._label = config["label"]
 
-        api_key = os.environ.get(config["key_env"])
-        if not api_key:
-            # Checked here because the OpenAI SDK would complain about OPENAI_API_KEY,
-            # sending you after a variable that has nothing to do with this provider.
-            raise LLMAuthError(_missing_key_message(provider, config["key_env"]))
+        key_env = config["key_env"]
+        if key_env is None:
+            # Keyless provider (local). The SDK still refuses to construct without a
+            # non-empty string, so hand it a placeholder the server never reads.
+            api_key = "local-no-key-needed"
+        else:
+            api_key = os.environ.get(key_env)
+            if not api_key:
+                # Checked here because the OpenAI SDK would complain about
+                # OPENAI_API_KEY, sending you after a variable that has nothing to do
+                # with this provider.
+                raise LLMAuthError(_missing_key_message(provider, key_env))
 
         self._client = openai.OpenAI(api_key=api_key, base_url=config["base_url"])
         self._model = model or os.environ.get(
@@ -265,6 +285,13 @@ class GroqLLMClient(OpenAICompatibleClient):
         super().__init__("groq", model)
 
 
+class OllamaLLMClient(OpenAICompatibleClient):
+    """A model served by Ollama on this machine. No API key, no per-call cost."""
+
+    def __init__(self, model: str | None = None) -> None:
+        super().__init__("ollama", model)
+
+
 def make_client(provider: str | None = None, model: str | None = None) -> LLMClient:
     """Build the selected provider's client. Selection is explicit, never inferred."""
     provider = (
@@ -276,4 +303,6 @@ def make_client(provider: str | None = None, model: str | None = None) -> LLMCli
         return GrokLLMClient(model=model)
     if provider == "groq":
         return GroqLLMClient(model=model)
+    if provider == "ollama":
+        return OllamaLLMClient(model=model)
     raise ValueError(f"unknown provider {provider!r}; expected one of {PROVIDERS}")

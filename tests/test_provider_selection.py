@@ -11,6 +11,8 @@ from everliving.llm import (
     DEFAULT_GROK_MODEL,
     DEFAULT_MODEL,
     GROK_BASE_URL,
+    OLLAMA_BASE_URL,
+    PROVIDERS,
     LLMAuthError,
     LLMRefusal,
     LLMUnavailable,
@@ -161,6 +163,62 @@ def test_grok_low_credit_becomes_unavailable(monkeypatch):
     with pytest.raises(LLMUnavailable) as excinfo:
         llm.GrokLLMClient().complete("sys", "hi")
     assert "insufficient credits" in str(excinfo.value)
+
+
+# --- the Ollama client (local, keyless) ------------------------------------
+
+
+def test_ollama_is_a_known_provider():
+    assert "ollama" in PROVIDERS
+
+
+def test_env_var_selects_ollama(monkeypatch):
+    monkeypatch.setenv("EVERLIVING_PROVIDER", "ollama")
+    monkeypatch.setattr(llm, "OllamaLLMClient", lambda **kw: "ollama-client")
+    assert make_client() == "ollama-client"
+
+
+def test_ollama_targets_the_loopback_endpoint(monkeypatch):
+    """Must stay on loopback: the point of this provider is that no prompt — and no
+    memory of the player's — leaves the machine."""
+    captured = _fake_openai(monkeypatch)
+    llm.OllamaLLMClient().complete("你是陌洲。", "你好")
+    assert captured["base_url"] == OLLAMA_BASE_URL
+    assert "127.0.0.1" in OLLAMA_BASE_URL
+
+
+def test_ollama_needs_no_api_key(monkeypatch):
+    """The other providers raise LLMAuthError when their key is missing. Doing that
+    here would put a paid account back in front of a playtest that runs locally —
+    which is the exact threshold that blocked H-1 in the first place."""
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    captured = _fake_openai(monkeypatch)
+    llm.OllamaLLMClient().complete("sys", "hi")  # must not raise
+    # The OpenAI SDK refuses to construct without *some* key; Ollama ignores the value.
+    assert captured["api_key"]
+
+
+def test_ollama_still_sends_system_prompt_as_a_message(monkeypatch):
+    captured = _fake_openai(monkeypatch)
+    llm.OllamaLLMClient().complete("你是陌洲。", "你好")
+    assert [m["role"] for m in captured["messages"]] == ["system", "user"]
+
+
+def test_ollama_records_usage_so_the_cost_report_still_works(monkeypatch):
+    """Local inference is free, but the token counts are the comparison baseline
+    against the frontier numbers in PROGRESS.md — they still have to be recorded."""
+    _fake_openai(monkeypatch, reply="我在修水管。")
+    client = llm.OllamaLLMClient()
+    assert client.complete("sys", "hi") == "我在修水管。"
+    assert client.last_usage["input_tokens"] == 120
+    assert client.last_usage["output_tokens"] == 45
+
+
+def test_ollama_honours_model_override(monkeypatch):
+    monkeypatch.setenv("EVERLIVING_MODEL", "llama3.2:latest")
+    captured = _fake_openai(monkeypatch)
+    llm.OllamaLLMClient().complete("sys", "hi")
+    assert captured["model"] == "llama3.2:latest"
 
 
 # --- shared error translation ---------------------------------------------
