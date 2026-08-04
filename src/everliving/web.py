@@ -18,15 +18,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import os
 import sqlite3
 import sys
 import threading
+import time
 import webbrowser
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from everliving import db, persona
+from everliving import db, logs, persona
 from everliving.agent_loop import respond
 from everliving.config import load_dotenv
 from everliving.llm import (
@@ -49,6 +52,8 @@ PAGE = Path(__file__).parent / "static" / "index.html"
 #: and a local playtest has exactly one player, so serialising is both correct
 #: and simpler than reasoning about concurrent writes to the same agent.
 _lock = threading.Lock()
+
+_log = logs.get_logger("web")
 
 
 class Session:
@@ -178,11 +183,26 @@ def _make_handler(session: Session):
                 self._json(400, {"error": "bad json"})
                 return
 
+            started = time.monotonic()
             with _lock:
                 try:
-                    self._json(200, handler(body))
+                    payload = handler(body)
                 except (LLMAuthError, LLMUnavailable, LLMRefusal) as exc:
+                    # Expected and shown to the player, but still worth a line: a run
+                    # that dies on a bad key must leave a reason behind.
+                    _log.warning("%s → %s: %s", self.path, type(exc).__name__, exc)
                     self._json(200, {"error": str(exc)})
+                except Exception:
+                    # Anything unforeseen used to escape into the request thread and
+                    # take it down with a traceback the player never saw and the file
+                    # never recorded. Log it, then answer something.
+                    _log.exception("%s blew up", self.path)
+                    self._json(500, {"error": "伺服器出錯了,細節在 everliving.log。"})
+                else:
+                    _log.info(
+                        "%s ok in %.1fs", self.path, time.monotonic() - started
+                    )
+                    self._json(200, payload)
 
         def _open(self, body):
             return session.open()
@@ -211,24 +231,49 @@ def _parse_args(argv):
         help="假裝你已經離開 N 小時(playtest 用,跟 CLI 同一個意思)。",
     )
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument(
+        "--log-file",
+        default=logs.LOG_FILENAME,
+        help=f"這一趟的記錄寫去哪(預設 {logs.LOG_FILENAME})。",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="連 prompt 和玩家講的話都記下來。內容是玩家的,所以預設不記。",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> None:
     args = _parse_args(argv)
     load_dotenv()
+    log_path = logs.setup(
+        args.log_file, level=logging.DEBUG if args.debug else logging.INFO
+    )
 
     try:
         session = Session("everliving.db", args.provider, args.offline_hours)
     except (LLMAuthError, LLMUnavailable) as exc:
+        # This is where a dead key lands. It used to be visible only as a red string
+        # in the browser, so a failed playtest left nothing to diagnose afterwards.
+        _log.error("LLM client 建不起來:%s", exc)
         print(f"無法初始化 LLM client:{exc}")
         sys.exit(1)
+
+    _log.info(
+        "啟動 — provider=%s model=%s port=%s offline_hours=%s",
+        args.provider or os.environ.get("EVERLIVING_PROVIDER") or "(預設)",
+        getattr(session.llm, "_model", "?"),
+        args.port,
+        args.offline_hours,
+    )
 
     # 127.0.0.1, not 0.0.0.0 — this process holds an API key that spends real money.
     server = ThreadingHTTPServer(("127.0.0.1", args.port), _make_handler(session))
     url = f"http://127.0.0.1:{args.port}/"
-    print(f"開著了:{url}")
-    print("(Ctrl-C 結束)")
+    print(f"開著了:{url}", flush=True)
+    print(f"記錄寫在:{log_path.resolve()}", flush=True)
+    print("(Ctrl-C 結束)", flush=True)
     if not args.no_browser:
         webbrowser.open(url)
     try:

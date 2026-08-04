@@ -15,7 +15,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 from conftest import FakeLLMClient
 
-from everliving import db, web
+from everliving import db, logs, web
 
 
 @pytest.fixture
@@ -167,6 +167,34 @@ def test_oversized_bodies_are_refused_before_reaching_the_model(server, session)
 
     assert excinfo.value.code == 413
     assert session.fake.calls == []
+
+
+def test_an_unexpected_error_answers_500_and_is_written_down(server, session, tmp_path):
+    """An exception we didn't anticipate used to escape into the request thread: the
+    player saw a hung page and the run recorded nothing. Now it answers, and the
+    reason survives in the log."""
+    log_path = tmp_path / "boom.log"
+    logs.setup(path=log_path, console=False)
+
+    def explode(_message):
+        raise RuntimeError("資料庫爆了")
+
+    session.say = explode
+
+    request = urllib.request.Request(
+        server + "/api/say",
+        data=json.dumps({"message": "你好"}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(request)
+    assert excinfo.value.code == 500
+
+    logs.reset()
+    written = log_path.read_text(encoding="utf-8")
+    assert "資料庫爆了" in written
+    assert "RuntimeError" in written
 
 
 def test_a_body_that_is_not_utf8_is_a_400_not_a_crash(server, session):

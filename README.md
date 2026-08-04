@@ -96,6 +96,23 @@ python -m everliving.web --provider ollama
 
 **選擇一律是明示的,不會自動偵測**:偷偷換模型等於偷偷改變 playtest 在量什麼。
 
+### 出事的時候去哪裡看 / Logs
+
+每一趟都會寫 `everliving.log`(UTF-8;`--log-file` 可以換路徑)。裡面有:
+
+- 啟動用的 provider、model、port
+- 每個請求的路徑跟耗時
+- 每次 LLM 呼叫的 model、秒數、input/output token
+- 失敗的完整原因(例如 `AuthenticationError: ... API key is invalid`),意外的例外連 traceback
+
+```
+2026-08-04 23:53:16 INFO  everliving.web | 啟動 — provider=groq model=qwen/qwen3.6-27b port=8773
+2026-08-04 23:53:23 INFO  everliving.llm | Groq ← qwen/qwen3.6-27b in 2.1s (in=230 out=860)
+```
+
+**API key 永遠不會進到 log 裡。** 玩家講的話跟 prompt 也不會——那是玩家的東西,
+要看得加 `--debug` 明示打開。**日誌是 gitignore 的**,不會不小心 commit 出去。
+
 關掉再重開,第二次啟動時會先印出「這段時間發生的事」——這就是里程碑 0 要驗證的核心體驗。
 離線期間不只是產生一段敘述:agent 的狀態會實際改變,而且通常會留下**一件在等你回應的事**。
 你回應之後,下一次離線期間會接著發展下去。

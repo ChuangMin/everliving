@@ -74,7 +74,30 @@ CLI/web 的進入點會 `load_dotenv()`,所以**開發者本機的 `.env` 決定
 結果是**整條 request thread 帶著 traceback 死掉、什麼都不回**。改成兩個都接,回 400。
 瀏覽器一定送 UTF-8 所以玩家碰不到,但那是一條沒人看守的當機路徑。先寫測試(紅)再修(綠)。
 
-**下一步**:H-1,直接 `python -m everliving.web`(`.env` 已經指向 groq)。
+**再追加:全程記錄(T0-14)。人類說「系統應該要能記錄一切,才 troubleshoot 得動」——這是對的,
+而且當場就有證據。** 人類跑 `python -m everliving.web` 之後,輸出檔案是**完全空的**,
+連「開著了」那行都沒有:Python 在 stdout 不是 TTY 的時候會 buffer。
+也就是說**這一整天的 401 只以「瀏覽器裡一行紅字」的形式存在過**,行程本身沒留下任何東西。
+兩次被門檻擋住卻要靠人肉轉述錯誤訊息,根因就是這個。
+
+現在每趟寫 `everliving.log`(UTF-8——預設的 cp950 編不出「陌洲」,**寫 log 時當掉會反過來弄死它在報告的東西**):
+啟動的 provider/model/port、每個請求的耗時、每次 LLM 呼叫的 model/秒數/token、失敗的完整原因。
+實測抓到的兩種樣子:
+
+```
+INFO  everliving.web | 啟動 — provider=groq model=qwen/qwen3.6-27b port=8773
+INFO  everliving.llm | Groq ← qwen/qwen3.6-27b in 2.1s (in=230 out=860)
+ERROR everliving.llm | Anthropic ✗ claude-haiku-4-5 after 0.3s — AuthenticationError: 401 ... API key is invalid.
+```
+
+**兩條界線:key 永遠不進 log(沒有任何一行會格式化環境變數);玩家講的話跟 prompt 要 `--debug` 才記。**
+第二條是設計文件那句「玩家的記憶是已承諾的資產」的直接後果——**預設不要把玩家的話寫進一個他沒同意的檔案**。
+`*.log` 已進 .gitignore,不會不小心 commit 出去。
+
+順手補上 web 的 catch-all:沒預期到的例外以前會逸進 request thread 把它弄死——
+**玩家看到一個停住的頁面,而檔案裡什麼都沒有**。現在回 500 並寫下 traceback。**116 passed。**
+
+**下一步**:H-1,直接 `python -m everliving.web`(`.env` 已經指向 groq)。出事就看 `everliving.log`。
 
 **待人決定**:H-1;`ANTHROPIC_API_KEY` 要不要換一把有效的(不換也不擋 H-1);
 舊 commit 的 history 重寫指令仍待執行。

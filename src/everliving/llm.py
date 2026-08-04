@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import time
 from typing import Protocol
 
-from everliving import db
+from everliving import db, logs
+
+_log = logs.get_logger("llm")
 
 PROVIDERS = ("anthropic", "grok", "groq", "ollama")
 DEFAULT_PROVIDER = "anthropic"
@@ -154,6 +157,43 @@ class LLMClient(Protocol):
     last_usage: dict | None
 
 
+def _log_call_started(label: str, model: str, system_prompt: str, user_message: str):
+    """Record that a call went out, and return the clock to measure it against.
+
+    The prompts themselves are the player's side of the conversation, so they only
+    reach the file at DEBUG. Everything needed to diagnose a stuck or expensive run —
+    which provider, which model, how long, how many tokens — is INFO.
+    """
+    _log.info("%s → %s", label, model)
+    _log.debug("%s system prompt: %s", label, system_prompt)
+    _log.debug("%s user message: %s", label, user_message)
+    return time.monotonic()
+
+
+def _log_call_finished(label: str, model: str, started: float, usage: dict) -> None:
+    _log.info(
+        "%s ← %s in %.1fs (in=%s out=%s)",
+        label,
+        model,
+        time.monotonic() - started,
+        usage["input_tokens"],
+        usage["output_tokens"],
+    )
+
+
+def _log_call_failed(label: str, model: str, started: float, exc: Exception) -> None:
+    # The provider's own message, which is usually the actual instruction ("API key is
+    # invalid", "insufficient credits"). No key is ever part of it.
+    _log.error(
+        "%s ✗ %s after %.1fs — %s: %s",
+        label,
+        model,
+        time.monotonic() - started,
+        type(exc).__name__,
+        exc,
+    )
+
+
 def log_usage(
     conn: sqlite3.Connection, llm: LLMClient, agent_id: int | None, purpose: str
 ) -> None:
@@ -183,6 +223,7 @@ class AnthropicLLMClient:
         self.last_usage: dict | None = None
 
     def complete(self, system_prompt: str, user_message: str) -> str:
+        started = _log_call_started("Anthropic", self._model, system_prompt, user_message)
         try:
             response = self._client.messages.create(
                 model=self._model,
@@ -191,12 +232,14 @@ class AnthropicLLMClient:
                 messages=[{"role": "user", "content": user_message}],
             )
         except Exception as exc:
+            _log_call_failed("Anthropic", self._model, started, exc)
             raise translate_sdk_error(exc, self._anthropic, "Anthropic") from exc
         self.last_usage = {
             "model": self._model,
             "input_tokens": response.usage.input_tokens,
             "output_tokens": response.usage.output_tokens,
         }
+        _log_call_finished("Anthropic", self._model, started, self.last_usage)
         if response.stop_reason == "refusal":
             raise LLMRefusal("模型拒絕回應這個請求。")
         return extract_text(response.content)
@@ -232,6 +275,7 @@ class OpenAICompatibleClient:
         self.last_usage: dict | None = None
 
     def complete(self, system_prompt: str, user_message: str) -> str:
+        started = _log_call_started(self._label, self._model, system_prompt, user_message)
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
@@ -243,6 +287,7 @@ class OpenAICompatibleClient:
                 ],
             )
         except Exception as exc:
+            _log_call_failed(self._label, self._model, started, exc)
             raise translate_sdk_error(exc, self._openai, self._label) from exc
 
         usage = response.usage
@@ -251,6 +296,7 @@ class OpenAICompatibleClient:
             "input_tokens": usage.prompt_tokens,
             "output_tokens": usage.completion_tokens,
         }
+        _log_call_finished(self._label, self._model, started, self.last_usage)
         choice = response.choices[0]
         if choice.finish_reason == "content_filter":
             raise LLMRefusal("模型拒絕回應這個請求。")

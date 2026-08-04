@@ -59,6 +59,15 @@
       注意:原本有個測試正好在**斷言這個 bug 的行為**(立刻重開就該看到敘事),已改成把 `last_seen`
       往前調再測,這樣測的是真實路徑而不是旗標。
 
+- [x] `done` **T0-14 全程記錄(troubleshooting)** — 2026-08-04 完成(claimed-by: Claude Opus 5)。
+      人類指出「系統應該要能記錄一切,才troubleshoot得動」。當時 `python -m everliving.web`
+      連啟動那行都看不到(stdout 不是 TTY 時會被 buffer 住),401 只以瀏覽器裡一行紅字存在,
+      跑完什麼證據都沒留下。現在每趟寫 `everliving.log`(UTF-8):啟動的 provider/model/port、
+      每個請求的耗時、每次 LLM 呼叫的 model/秒數/token、失敗的完整原因與 traceback。
+      **key 永遠不進 log;玩家講的話要 `--debug` 才記**(內容是玩家的)。
+      順手補上 web 的 catch-all:沒預期到的例外以前會逸進 request thread 把它弄死、
+      玩家看到一個停住的頁面而檔案裡什麼都沒有,現在回 500 並寫下 traceback。
+
 - [x] `done` **T0-13 本機 Ollama provider** — 2026-08-04 完成(claimed-by: Claude Opus 5)。
       `.env` 裡的 `ANTHROPIC_API_KEY` 實際打出去是 **401 invalid**,H-1 第 1 步直接開不起來——
       這是第二次被「門檻」而不是「內容」擋住,跟當初沒有畫面是同一類問題。
