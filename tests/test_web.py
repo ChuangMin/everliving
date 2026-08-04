@@ -167,3 +167,20 @@ def test_oversized_bodies_are_refused_before_reaching_the_model(server, session)
 
     assert excinfo.value.code == 413
     assert session.fake.calls == []
+
+
+def test_a_body_that_is_not_utf8_is_a_400_not_a_crash(server, session):
+    """`json.loads` on bytes decodes first, so invalid UTF-8 raises UnicodeDecodeError
+    — not the JSONDecodeError the handler was catching. That killed the request thread
+    with a traceback and answered nothing at all."""
+    request = urllib.request.Request(
+        server + "/api/say",
+        data="{'message': '你好'}".encode("big5"),  # any non-UTF-8 encoding
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(request)
+
+    assert excinfo.value.code == 400
+    assert session.fake.calls == []

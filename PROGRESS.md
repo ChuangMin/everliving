@@ -53,7 +53,28 @@ Agent: Claude Opus 5(互動 session)
 Ollama 的價值不變,但它的定位是**保險絲不是主力**——帳號全部失效時 playtest 仍然跑得起來,
 以及日後量「開源模型行不行」時不用花錢。
 
-**下一步**:H-1,每行加 `--provider groq`。
+**再追加(同一天,人類回報網頁版還是 401):問題是預設值,不是 provider。**
+`python -m everliving.web` 不帶旗標時預設 `anthropic`,也就是那把壞掉的 key。
+改成在 `.env` 設 `EVERLIVING_PROVIDER=groq`(`web.py` 的 `load_dotenv()` 在建 client 之前跑,
+`make_client` 本來就會讀這個變數),之後直接 `python -m everliving.web` 就是 Qwen。
+實際跑過一趟真的 HTTP:`/api/say` 回「我手上的扳手還卡在氧氣循環泵的生鏽閥門上……」,不再有 401。
+
+**但這一改打爆了 8 個測試,而且暴露一個本來就存在的地雷。**
+CLI/web 的進入點會 `load_dotenv()`,所以**開發者本機的 `.env` 決定了測試在測什麼**——
+設了 `EVERLIVING_PROVIDER=groq` 之後,那 8 個測試開始打真的 API,整套從 4 秒變成 **200 秒**。
+**會偷偷連到真 API 的測試已經不算測試了。**
+
+修法要注意一個坑:**把環境變數刪掉沒有用**。`load_dotenv()` 是在測試*裡面*才跑的,
+而它只跳過「已經在環境裡」的鍵——事先清掉的變數會被檔案原封不動再設回來。
+所以 conftest 改成 `monkeypatch.chdir(tmp_path)`,讓每個測試在一個**沒有 `.env` 的目錄**下跑。
+**112 passed,4.1 秒。**
+
+**順手修掉一個真的 bug**(是這次 curl 亂碼意外撞出來的):`/api/say` 收到非 UTF-8 的 body 時,
+`json.loads` 會丟 `UnicodeDecodeError` 而不是被接住的 `JSONDecodeError`,
+結果是**整條 request thread 帶著 traceback 死掉、什麼都不回**。改成兩個都接,回 400。
+瀏覽器一定送 UTF-8 所以玩家碰不到,但那是一條沒人看守的當機路徑。先寫測試(紅)再修(綠)。
+
+**下一步**:H-1,直接 `python -m everliving.web`(`.env` 已經指向 groq)。
 
 **待人決定**:H-1;`ANTHROPIC_API_KEY` 要不要換一把有效的(不換也不擋 H-1);
 舊 commit 的 history 重寫指令仍待執行。

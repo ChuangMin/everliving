@@ -171,7 +171,10 @@ def _make_handler(session: Session):
             raw = self.rfile.read(length) if length else b"{}"
             try:
                 body = json.loads(raw or b"{}")
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                # json.loads decodes bytes before parsing, so a body that isn't UTF-8
+                # fails earlier and with a different exception than malformed JSON.
+                # Uncaught it killed the request thread and answered nothing at all.
                 self._json(400, {"error": "bad json"})
                 return
 

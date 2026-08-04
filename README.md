@@ -76,7 +76,7 @@ $env:GROQ_API_KEY = "gsk_..."
 python -m everliving.cli --provider groq
 ```
 
-或設 `EVERLIVING_PROVIDER=groq` 省掉每次打參數。模型 ID 用 `EVERLIVING_MODEL` 覆蓋——各家的 ID 會變,404 的時候去對應的 console 查目前有哪些。
+或在 `.env` 裡設 `EVERLIVING_PROVIDER=groq` 省掉每次打參數(網頁版和 CLI 都吃這個變數)。模型 ID 用 `EVERLIVING_MODEL` 覆蓋——各家的 ID 會變,404 的時候去對應的 console 查目前有哪些。
 
 **Groq 上的模型實測**(用真的離線模擬 prompt 比較過,見 `PROGRESS.md`):`qwen/qwen3.6-27b` 的繁中文筆和懸念設計明顯最好,所以是預設值。`openai/gpt-oss-120b` 可用但狀態鍵名會跑成英文;`llama-3.3-70b-versatile` 敘事偏流水帳。
 
