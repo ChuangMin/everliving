@@ -45,9 +45,18 @@ Agent: Claude Opus 5(互動 session)
 那會變成第三次「測試沒被真的跑到」。只有兩個樣本,還不能下結論,但**跑 H-1 時要特別看第 2 步有沒有懸念**;
 沒有的話,那一步要換模型重跑,不要當成敘事本身不行。
 
-**下一步**:H-1。key 換掉,或每行加 `--provider ollama`。
+**最後補一個實測:壞掉的只有 `ANTHROPIC_API_KEY`,`GROQ_API_KEY` 是好的。**
+`--provider groq` 真的打出去:**2.8 秒**、`qwen/qwen3.6-27b`,而且繁體中文明顯是三個選項裡最好的
+(「鏽死的螺絲拆得滿手油污」——7B 出不了這種句子,還會混進簡體字)。
 
-**待人決定**:H-1;`ANTHROPIC_API_KEY` 要不要換一把有效的;舊 commit 的 history 重寫指令仍待執行。
+**所以 H-1 該用 `--provider groq` 跑**:最快、最好、而且不用等本機 CPU。
+Ollama 的價值不變,但它的定位是**保險絲不是主力**——帳號全部失效時 playtest 仍然跑得起來,
+以及日後量「開源模型行不行」時不用花錢。
+
+**下一步**:H-1,每行加 `--provider groq`。
+
+**待人決定**:H-1;`ANTHROPIC_API_KEY` 要不要換一把有效的(不換也不擋 H-1);
+舊 commit 的 history 重寫指令仍待執行。
 
 ---
 
