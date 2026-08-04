@@ -83,6 +83,40 @@ def test_say_returns_the_reply_and_the_current_state(session):
     assert "state" in payload and "threads" in payload
 
 
+def test_the_workbench_counts_nights_events_and_exchanges(session):
+    """The panel leads with nights he lived through without you, because that is the
+    number the whole bet rests on."""
+    session.fake.reply = json.dumps(
+        {"narrative": "夜裡漲潮。", "events": ["撿到一段管線", "修好了閥門"],
+         "scene": "潮線"}, ensure_ascii=False
+    )
+    session.leave()
+    _backdate(session, hours=24)
+    session.open()
+    session.fake.reply = "我在修水管。"
+    session.say("在忙嗎?")
+
+    ledger = session.say("還好嗎?")["ledger"]
+    assert ledger["nights"] == 1
+    assert ledger["events"] == 2
+    assert ledger["exchanges"] == 2   # two player turns, each stored as a pair
+    assert ledger["resolved"] == 0
+
+
+def test_the_workbench_starts_empty_rather_than_wrong(session):
+    payload = session.open()
+    assert payload["ledger"] == {"nights": 0, "events": 0, "exchanges": 0, "resolved": 0}
+
+
+def test_a_reply_carries_its_own_anchor_and_assets(session):
+    """Assets ride alongside every beat, not just the offline ones."""
+    session.fake.reply = "我在修水管。"
+    payload = session.say("在嗎?")
+
+    assert payload["event_id"] is not None
+    assert payload["assets"] == []   # nothing attached yet, and that must not error
+
+
 def test_a_visit_with_no_offline_period_opens_in_the_workshop(session):
     """The opening shot and the can't-draw-that fallback used to be the same constant,
     so a first visit landed on the city panorama by accident rather than by choice.

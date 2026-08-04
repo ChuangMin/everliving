@@ -101,6 +101,43 @@
   button:focus-visible,input:focus-visible{outline:2px solid var(--verdigris);outline-offset:2px}
   button:disabled{opacity:.35;cursor:default}
 
+  /* The workbench. Not a menu bolted onto a game — it's the bench he works at, so it
+     opens as a drawer from the bottom and is laid out like a job card: where he is,
+     what's in his hands, what's still open. */
+  .bench-open{position:absolute;right:16px;bottom:38px;background:rgba(7,18,26,.72);
+              border:1px solid var(--edge);color:var(--dim);padding:7px 13px;cursor:pointer;
+              letter-spacing:.28em;font:10px/1 ui-monospace,Menlo,monospace}
+  .bench-open:hover{color:var(--sodium);border-color:var(--verdigris)}
+  .bench{position:fixed;inset:auto 0 0 0;max-height:82vh;overflow:auto;z-index:5;
+         background:#08141b;border-top:1px solid var(--verdigris);
+         padding:22px 22px 30px;transform:translateY(101%);transition:transform .28s ease}
+  .bench[data-open="1"]{transform:translateY(0)}
+  .bench-inner{max-width:680px;margin:0 auto}
+  .bench h2{font:11px/1 ui-monospace,Menlo,monospace;letter-spacing:.34em;color:var(--sodium);
+            margin:0 0 20px;font-weight:400}
+  .bench h3{font:10px/1 ui-monospace,Menlo,monospace;letter-spacing:.3em;color:var(--faint);
+            margin:22px 0 10px;font-weight:400}
+  .bench .close{position:absolute;top:18px;right:22px;background:none;border:0;
+                color:var(--faint);cursor:pointer;font-size:20px;line-height:1;padding:4px}
+  .bench .close:hover{color:var(--sodium)}
+  .tally{display:flex;flex-wrap:wrap;gap:0 30px;margin:0;padding:0;list-style:none}
+  .tally li{padding:0 0 8px;border-bottom:1px solid var(--edge);min-width:84px}
+  .tally b{display:block;font:10px/1.6 ui-monospace,Menlo,monospace;letter-spacing:.24em;
+           color:var(--faint);font-weight:400}
+  .tally span{font-size:22px;color:var(--salt)}
+  .kv{margin:0;padding:0;list-style:none}
+  .kv li{display:flex;gap:14px;padding:7px 0;border-bottom:1px solid var(--edge)}
+  .kv b{font:10px/1.9 ui-monospace,Menlo,monospace;letter-spacing:.2em;color:var(--faint);
+        font-weight:400;min-width:98px}
+  .empty{color:var(--faint);font-size:14px;margin:0}
+
+  /* Where a clip or a page shows up when a beat has one. It sits beside the words and
+     never in place of them — anything only in the asset is invisible to whoever skips
+     it (設計文件 第五節). Nothing has assets yet, so this stays absent. */
+  .assets{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0;padding:0;list-style:none}
+  .assets li{font:10px/1 ui-monospace,Menlo,monospace;letter-spacing:.2em;color:var(--faint);
+             border:1px solid var(--edge);padding:6px 10px}
+
   .note{color:var(--faint);margin:0 0 18px}
   .err{color:var(--sodium);margin:0 0 18px;padding-left:14px;
        border-left:2px solid var(--rust)}
@@ -178,6 +215,27 @@
 
   <div class="clock stencil" id="clock"><b id="clockTime"></b><span id="clockTide"></span></div>
   <div class="place stencil" id="place">工作間</div>
+  <button class="bench-open" id="benchOpen" aria-haspopup="dialog">工作檯</button>
+</div>
+
+<div class="bench" id="bench" data-open="0" role="dialog" aria-modal="false" aria-label="工作檯">
+  <div class="bench-inner">
+    <button class="close" id="benchClose" aria-label="關閉工作檯">×</button>
+    <h2>工作檯</h2>
+
+    <ul class="tally" id="tally"></ul>
+
+    <h3>在哪</h3>
+    <p class="empty" id="benchPlace"></p>
+
+    <h3>手上的東西 / 狀態</h3>
+    <ul class="kv" id="benchState"></ul>
+    <p class="empty" id="benchStateEmpty" hidden>還沒有。狀態是離線那段時間長出來的,不是一開始就有的。</p>
+
+    <h3>還沒完的事</h3>
+    <ul class="kv" id="benchThreads"></ul>
+    <p class="empty" id="benchThreadsEmpty" hidden>沒有他在等你的事。</p>
+  </div>
 </div>
 
 <main>
@@ -616,19 +674,81 @@
     $('threadText').textContent = list[0];
     box.hidden = false;
   }
-  function turn(who, text, mine){
+  function turn(who, text, mine, beatAssets){
     const d = document.createElement('div'); d.className = 'turn'+(mine?' me':'');
     const s = document.createElement('span'); s.className = 'who stencil'; s.textContent = who;
     const p = document.createElement('p'); p.textContent = text;
-    d.appendChild(s); d.appendChild(p); $('log').appendChild(d);
+    d.appendChild(s); d.appendChild(p);
+    assets(beatAssets, d);
+    $('log').appendChild(d);
     d.scrollIntoView({behavior:'smooth', block:'end'});
   }
   function fail(msg){ $('err').textContent = msg; $('err').hidden = false; }
 
+  /* ---- the workbench ---- */
+  const TALLY = [
+    ['nights',   '他獨自過的夜'],
+    ['events',   '發生過的事'],
+    ['exchanges','你們說過的話'],
+    ['resolved', '了結的事'],
+  ];
+  let lastState = {}, lastThreads = [], lastLedger = {};
+
+  function bench(){
+    const t = $('tally'); t.textContent='';
+    TALLY.forEach(([k,label])=>{
+      const li=document.createElement('li');
+      const b=document.createElement('b'); b.textContent=label;
+      const s=document.createElement('span'); s.textContent = (lastLedger[k] ?? 0);
+      li.appendChild(b); li.appendChild(s); t.appendChild(li);
+    });
+    $('benchPlace').textContent = currentScene;
+
+    const st=$('benchState'); st.textContent='';
+    const entries = Object.entries(lastState || {});
+    $('benchStateEmpty').hidden = entries.length > 0;
+    entries.forEach(([k,v])=>{
+      const li=document.createElement('li');
+      const b=document.createElement('b'); b.textContent=k;
+      const s=document.createElement('span'); s.textContent=v;
+      li.appendChild(b); li.appendChild(s); st.appendChild(li);
+    });
+
+    const th=$('benchThreads'); th.textContent='';
+    $('benchThreadsEmpty').hidden = (lastThreads||[]).length > 0;
+    (lastThreads||[]).forEach(d=>{
+      const li=document.createElement('li');
+      const b=document.createElement('b'); b.textContent='在等你';
+      const s=document.createElement('span'); s.textContent=d;
+      li.appendChild(b); li.appendChild(s); th.appendChild(li);
+    });
+  }
+  function setBench(open){
+    $('bench').setAttribute('data-open', open ? '1' : '0');
+    if(open){ bench(); $('benchClose').focus(); } else { $('benchOpen').focus(); }
+  }
+  $('benchOpen').addEventListener('click', ()=>setBench(true));
+  $('benchClose').addEventListener('click', ()=>setBench(false));
+  addEventListener('keydown', e=>{ if(e.key==='Escape') setBench(false); });
+
+  /* A beat's assets sit beside its text, never instead of it. */
+  function assets(list, into){
+    if(!list || !list.length) return;
+    const ul=document.createElement('ul'); ul.className='assets';
+    list.forEach(a=>{
+      const li=document.createElement('li'); li.textContent=a.kind+' · '+a.ref;
+      ul.appendChild(li);
+    });
+    into.appendChild(ul);
+  }
+
   function apply(data){
     if(data.error){ fail(data.error); return false; }
+    lastState = data.state || {}; lastThreads = data.threads || [];
+    if(data.ledger) lastLedger = data.ledger;
     readout(data.state); threads(data.threads);
     if(data.scene){ currentScene = data.scene; drawScene(currentScene); }
+    if($('bench').getAttribute('data-open') === '1') bench();
     return true;
   }
 
@@ -644,6 +764,7 @@
       (data.offline.events||[]).forEach(e=>{
         const li = document.createElement('li'); li.textContent = e; ul.appendChild(li);
       });
+      assets(data.offline.assets, $('offline').firstElementChild);
       $('offline').hidden = false;
     }
     $('msg').disabled = false; $('send').disabled = false; $('msg').focus();
@@ -657,7 +778,7 @@
     turn('你', text, true);
     $('msg').value=''; $('msg').disabled = true; $('send').disabled = true;
     post('/api/say',{message:text}).then(data=>{
-      if(apply(data) && data.reply) turn($('who').textContent, data.reply, false);
+      if(apply(data) && data.reply) turn($('who').textContent, data.reply, false, data.assets);
     }).catch(()=>fail('沒送出去。')).finally(()=>{
       $('msg').disabled = false; $('send').disabled = false; $('msg').focus();
     });

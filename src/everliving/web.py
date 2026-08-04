@@ -82,6 +82,30 @@ class Session:
             "name": self.agent["name"],
             "state": db.get_state(conn, self.agent_id),
             "threads": [t["description"] for t in db.get_open_threads(conn, self.agent_id)],
+            "ledger": self.ledger(conn),
+        }
+
+    def ledger(self, conn: sqlite3.Connection) -> dict:
+        """What the workbench panel shows: where he is, what he's carrying, how much
+        has happened. Counts rather than contents — the panel is a place to check
+        standing, not a second copy of the story."""
+        counts = dict(
+            conn.execute(
+                "SELECT kind, COUNT(*) FROM memory_events WHERE agent_id = ? GROUP BY kind",
+                (self.agent_id,),
+            ).fetchall()
+        )
+        resolved = conn.execute(
+            "SELECT COUNT(*) FROM open_threads WHERE agent_id = ? AND status != 'open'",
+            (self.agent_id,),
+        ).fetchone()[0]
+        return {
+            # Nights he lived through without you. This is the number the whole bet
+            # rests on, so it is the one the panel leads with.
+            "nights": counts.get("offline_narrative", 0),
+            "events": counts.get("offline_event", 0),
+            "exchanges": counts.get("raw", 0) // 2,
+            "resolved": resolved,
         }
 
     def open(self) -> dict:
