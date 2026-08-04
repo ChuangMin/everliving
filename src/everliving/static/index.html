@@ -188,6 +188,15 @@
         <stop offset=".45" stop-color="#f0b45c" stop-opacity=".13"/>
         <stop offset="1" stop-color="#f0b45c" stop-opacity="0"/>
       </radialGradient>
+      <radialGradient id="arcGlow">
+        <stop offset="0" stop-color="#cfe8ff" stop-opacity=".85"/>
+        <stop offset=".35" stop-color="#7fb6dd" stop-opacity=".28"/>
+        <stop offset="1" stop-color="#7fb6dd" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="redGlow">
+        <stop offset="0" stop-color="#d2452f" stop-opacity=".4"/>
+        <stop offset="1" stop-color="#d2452f" stop-opacity="0"/>
+      </radialGradient>
       <radialGradient id="vignetteGrad">
         <stop offset=".55" stop-color="#000" stop-opacity="0"/>
         <stop offset="1" stop-color="#000" stop-opacity=".62"/>
@@ -221,6 +230,7 @@
 
     <g id="near"></g>
     <g id="rain" opacity=".5"></g>
+    <g id="action"></g>
     <rect id="grainRect" width="1000" height="420" filter="url(#grain)" opacity=".045"/>
     <rect width="1000" height="420" fill="url(#vignetteGrad)"/>
   </svg>
@@ -581,6 +591,65 @@
     g.appendChild(man);
   }
 
+  /* What's happening, drawn on top of wherever he is.
+     `scene` alone left the picture wrong in a way the player spotted straight away:
+     he described a welding arc on a valve face and got a generic workshop, because
+     the workshop was already the right place. These four each change the light, which
+     is why they read from across the room. */
+  function overlay(action){
+    const g = $('action'); g.textContent=''; if(!action) return;
+
+    if(action === '焊接'){
+      // The arc is the brightest thing in this world when it's lit, so it owns the
+      // frame: hard blue-white light, and everything else gets a cold cast.
+      const x = 430, y = 300;
+      const flare = el('ellipse',{cx:x, cy:y, rx:210, ry:150, fill:'url(#arcGlow)'});
+      flare.appendChild(el('animate',{attributeName:'opacity', values:'1;0.45;1;0.7;1',
+        dur:'0.28s', repeatCount:'indefinite'}));
+      g.appendChild(flare);
+      const core = el('circle',{cx:x, cy:y, r:7, fill:'#dff1ff'});
+      core.appendChild(el('animate',{attributeName:'r', values:'7;3.5;7;5;7',
+        dur:'0.22s', repeatCount:'indefinite'}));
+      g.appendChild(core);
+      for(let i=0;i<16;i++){
+        const a = Math.random()*Math.PI*2, d = 20+Math.random()*90;
+        const s = el('line',{x1:x, y1:y, x2:(x+Math.cos(a)*d).toFixed(1),
+          y2:(y+Math.abs(Math.sin(a))*d*0.7).toFixed(1), stroke:'#ffd9a0',
+          'stroke-width':0.9, opacity:0});
+        s.appendChild(el('animate',{attributeName:'opacity', values:'0;0.85;0',
+          dur:(0.4+Math.random()*0.7).toFixed(2)+'s', repeatCount:'indefinite',
+          begin:(Math.random()*1.2).toFixed(2)+'s'}));
+        g.appendChild(s);
+      }
+    } else if(action === '停電'){
+      // Everything the sodium lamps were doing, gone. One red emergency lamp left.
+      g.appendChild(el('rect',{x:0, y:0, width:1000, height:420, fill:'#01070b', opacity:.78}));
+      const em = el('circle',{cx:820, cy:120, r:4, fill:'#d2452f'});
+      em.appendChild(el('animate',{attributeName:'opacity', values:'1;0.15;1',
+        dur:'1.9s', repeatCount:'indefinite'}));
+      g.appendChild(em);
+      g.appendChild(el('ellipse',{cx:820, cy:120, rx:120, ry:90, fill:'url(#redGlow)'}));
+    } else if(action === '淹水'){
+      // Water above where it should be. Drawn over the foreground on purpose — the
+      // point is that it's reached somewhere it doesn't belong.
+      g.appendChild(el('rect',{x:0, y:300, width:1000, height:120, fill:'#0f2a33', opacity:.72}));
+      const line = el('path',{d:'', fill:'none', stroke:'#6fa8b5', 'stroke-width':1.2, opacity:.6});
+      let d = 'M0 300';
+      for(let x=0;x<=1000;x+=18) d += ` L${x} ${(300+Math.sin(x/45)*3).toFixed(1)}`;
+      line.setAttribute('d', d);
+      g.appendChild(line);
+    } else if(action === '起霧'){
+      g.appendChild(el('rect',{x:0, y:0, width:1000, height:420, fill:'#8fa8ad', opacity:.3}));
+      for(let i=0;i<5;i++){
+        const y = 140 + i*46;
+        const band = el('rect',{x:-200, y:y, width:1400, height:34, fill:'#cfe0e3', opacity:.09});
+        band.appendChild(el('animateTransform',{attributeName:'transform', type:'translate',
+          values:'0 0; 190 0; 0 0', dur:(26+i*9)+'s', repeatCount:'indefinite'}));
+        g.appendChild(band);
+      }
+    }
+  }
+
   function rain(on, r){
     const g = $('rain'); g.textContent='';
     if(!on) return;
@@ -597,9 +666,9 @@
   }
 
   /* ---- draw ---- */
-  let currentScene = '工作間';
+  let currentScene = '工作間', currentAction = null;
 
-  function drawScene(scene){
+  function drawScene(scene, action){
     const spec = PLACES[scene] || PLACES['港城'];
     const now = new Date();
     const hour = now.getHours() + now.getMinutes()/60;
@@ -669,11 +738,12 @@
 
     $('clockTime').textContent = now.toTimeString().slice(0,5);
     $('clockTide').textContent = (tide>0.5 ? '漲潮' : '退潮') + ' ' + Math.round(tide*100) + '%';
-    $('place').textContent = scene;
+    overlay(action !== undefined ? action : currentAction);
+    $('place').textContent = scene + (currentAction ? '・' + currentAction : '');
   }
 
   drawScene(currentScene);
-  setInterval(()=>drawScene(currentScene), 30000);
+  setInterval(()=>drawScene(currentScene, currentAction), 30000);
 
   /* ---- rendering. Everything the model wrote goes in as text, never as markup ---- */
   function readout(state){
@@ -764,7 +834,9 @@
     lastState = data.state || {}; lastThreads = data.threads || [];
     if(data.ledger) lastLedger = data.ledger;
     readout(data.state); threads(data.threads);
-    if(data.scene){ currentScene = data.scene; drawScene(currentScene); }
+    if('action' in data) currentAction = data.action || null;
+    if(data.scene) currentScene = data.scene;
+    if(data.scene || 'action' in data) drawScene(currentScene, currentAction);
     if($('bench').getAttribute('data-open') === '1') bench();
     return true;
   }

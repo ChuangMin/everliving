@@ -8,12 +8,12 @@ from dataclasses import dataclass
 
 from everliving import db
 from everliving.llm import LLMClient, log_usage
-from everliving.offline import SCENES
+from everliving.offline import ACTIONS, SCENES
 
 #: The stage direction at the end of a reply. Not dialogue — it never reaches the
 #: player, and it must never reach memory either, or the next turn feeds it back as
 #: something 陌洲 said.
-_SCENE_TAG = re.compile(r"\n*場景[:：]\s*(\S+)\s*$")
+_TAGS = re.compile(r"\n*(?:場景[:：]\s*(\S+)|動作[:：]\s*(\S+))\s*$")
 
 
 @dataclass
@@ -24,18 +24,32 @@ class Turn:
     reply: str
     #: Where he is after this turn, or None for "leave the picture where it is".
     scene: str | None = None
+    #: What is happening there — welding, a blackout — or None for nothing in
+    #: particular. Separate from `scene` because the place was often already right
+    #: while the picture still failed to match the words.
+    action: str | None = None
     #: The `memory_events` row holding the reply — the anchor for a clip or a page.
     event_id: int | None = None
 
 
-def split_scene_tag(raw: str) -> tuple[str, str | None]:
-    """Pull the trailing scene tag off a reply, if it wrote one we can draw."""
-    match = _SCENE_TAG.search(raw)
-    if not match:
-        return raw.strip(), None
-    scene = match.group(1)
-    # An unknown place would draw nothing, so hold the current picture instead.
-    return raw[: match.start()].strip(), scene if scene in SCENES else None
+def split_scene_tag(raw: str) -> tuple[str, str | None, str | None]:
+    """Strip the trailing stage directions off a reply.
+
+    Tags are matched from the end and peeled off one at a time, so their order doesn't
+    matter and a model that writes only one of them still parses. Anything we can't
+    draw resolves to None, which the display side reads as "don't change it" — a
+    missed tag has to freeze the picture, never send it somewhere wrong.
+    """
+    text, scene, action = raw.strip(), None, None
+    while True:
+        match = _TAGS.search(text)
+        if not match:
+            return text.strip(), scene, action
+        if match.group(1) is not None and scene is None:
+            scene = match.group(1) if match.group(1) in SCENES else None
+        elif match.group(2) is not None and action is None:
+            action = match.group(2) if match.group(2) in ACTIONS else None
+        text = text[: match.start()].strip()
 
 
 def build_system_prompt(agent: dict, has_open_threads: bool = False) -> str:
@@ -48,7 +62,12 @@ def build_system_prompt(agent: dict, has_open_threads: bool = False) -> str:
         # talked about being somewhere else. One line costs a few tokens and keeps
         # the scene honest to the words.
         "\n回覆結束後另起一行寫 `場景:X`,X 只能從這幾個選一個:"
-        f"{'、'.join(SCENES)}。那一行是給畫面用的,不是講給玩家聽的。"
+        f"{'、'.join(SCENES)}。\n"
+        # Place alone wasn't enough: he'd describe a welding arc and the picture
+        # showed a generic workshop, because the workshop *was* the right place.
+        "如果此刻正在發生下面其中一件事,再另起一行寫 `動作:Y`(沒有就不要寫這行):"
+        f"{'、'.join(ACTIONS)}。\n"
+        "這兩行是給畫面用的,不是講給玩家聽的。"
     )
     if has_open_threads:
         # Without this the agent never surfaces what it's waiting on, and the
@@ -101,9 +120,9 @@ def respond(
     raw = llm.complete(system_prompt, user_message)
     log_usage(conn, llm, agent_id, purpose="conversation")
 
-    reply, scene = split_scene_tag(raw)
+    reply, scene, action = split_scene_tag(raw)
 
     db.add_memory_event(conn, agent_id, kind="raw", content=f"玩家說:{player_message}")
     event_id = db.add_memory_event(conn, agent_id, kind="raw", content=f"我回答:{reply}")
 
-    return Turn(reply=reply, scene=scene, event_id=event_id)
+    return Turn(reply=reply, scene=scene, action=action, event_id=event_id)

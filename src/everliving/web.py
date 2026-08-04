@@ -165,6 +165,9 @@ class Session:
             # the picture alone otherwise rather than cutting to a default.
             if turn.scene:
                 payload["scene"] = turn.scene
+            # Always sent, including as null: "nothing in particular is happening" is
+            # a real state the picture has to be able to return to.
+            payload["action"] = turn.action
             payload["event_id"] = turn.event_id
             payload["assets"] = [
                 {"kind": a["kind"], "ref": a["ref"]}
@@ -200,6 +203,9 @@ class Session:
             payload["reply"] = turn.reply
             if turn.scene:
                 payload["scene"] = turn.scene
+            # Always sent, including as null: "nothing in particular is happening" is
+            # a real state the picture has to be able to return to.
+            payload["action"] = turn.action
             payload["event_id"] = turn.event_id
             payload["assets"] = [
                 {"kind": a["kind"], "ref": a["ref"]}

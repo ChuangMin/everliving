@@ -100,6 +100,21 @@ try {
         'workbench empties instead of showing stale rows');
 } catch (e) { check(false, `workbench threw: ${e.message}`); }
 
+// What's happening, on top of where he is. Each one has to actually draw something,
+// or the tag is costing prompt room and buying nothing.
+for(const action of ['焊接','停電','淹水','起霧']){
+  try {
+    globalThis.__draw('工作間', action);
+    const n = nodes.get('action').children.length;
+    check(n > 0, `${action} draws ${n} elements over the scene`);
+  } catch (e) { check(false, `${action} threw: ${e.message}`); }
+}
+try {
+  globalThis.__draw('工作間', null);
+  check(nodes.get('action').children.length === 0,
+        'clearing the action empties the overlay rather than leaving it stuck');
+} catch (e) { check(false, `clearing action threw: ${e.message}`); }
+
 // Handing the seat to an agent, and taking it back. The loop itself can't run here
 // (fetch never resolves), which is the point: toggling must be safe on its own.
 try {

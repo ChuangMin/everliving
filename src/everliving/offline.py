@@ -46,6 +46,16 @@ DEFAULT_SCENE = "港城"
 #: personal scene and the one that says who he is without a line of dialogue.
 OPENING_SCENE = "工作間"
 
+#: What is happening, as opposed to where. `scene` alone kept producing a mismatch the
+#: player noticed immediately: he'd describe a welding arc on a valve face and the
+#: picture showed a generic workshop. A place tag can't fix that, because the place was
+#: already right. So this is a second axis on the same closed-vocabulary principle —
+#: each value has a visible rendering, and anything else falls back to none.
+#: Kept deliberately short: every entry has to be worth drawing, and a long list would
+#: cost prompt room that the narrative itself needs.
+ACTIONS = ("焊接", "停電", "淹水", "起霧")
+NO_ACTION = ""
+
 
 @dataclass
 class OfflineResult:

@@ -93,6 +93,41 @@ def test_the_memory_stores_the_reply_without_the_tag(conn, fake_llm):
     assert not any("場景" in c for c in contents)
 
 
+def test_what_is_happening_is_tagged_separately_from_where(conn, fake_llm):
+    """The place tag couldn't fix the mismatch the player saw: he described a welding
+    arc and got a generic workshop, because the workshop was already the right place.
+    What was missing was what he was doing in it."""
+    fake_llm.reply = "閥面燒紅了。\n場景:工作間\n動作:焊接"
+    agent_id = persona.seed_default_agent(conn)
+
+    turn = respond(conn, agent_id, fake_llm, "在做什麼?")
+
+    assert turn.scene == "工作間"
+    assert turn.action == "焊接"
+    assert turn.reply == "閥面燒紅了。"
+
+
+def test_the_tags_parse_in_either_order(conn, fake_llm):
+    fake_llm.reply = "全黑了。\n動作:停電\n場景:配電所"
+    agent_id = persona.seed_default_agent(conn)
+
+    turn = respond(conn, agent_id, fake_llm, "怎麼了?")
+
+    assert (turn.scene, turn.action) == ("配電所", "停電")
+    assert turn.reply == "全黑了。"
+
+
+def test_an_action_we_cannot_draw_is_dropped_not_shown(conn, fake_llm):
+    fake_llm.reply = "我在跳舞。\n場景:工作間\n動作:跳舞"
+    agent_id = persona.seed_default_agent(conn)
+
+    turn = respond(conn, agent_id, fake_llm, "在幹嘛?")
+
+    assert turn.action is None
+    assert turn.scene == "工作間"
+    assert turn.reply == "我在跳舞。"
+
+
 def test_a_conversation_beat_gets_an_anchor_too(conn, fake_llm):
     """Every beat the system produces carries an id, not just the offline ones —
     otherwise half the story could never hold a clip or a page."""
