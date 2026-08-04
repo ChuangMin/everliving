@@ -34,7 +34,17 @@ def is_worth_simulating(elapsed: timedelta | None, minimum: timedelta = MIN_OFFL
 #: from quietly adding geography (generating places is the expensive kind — see the
 #: design doc on rings).
 SCENES = ("工作間", "回收場", "潮線", "配電所", "機器廠", "港城")
+
+#: Where to land when the model names a place we can't draw. The city panorama is the
+#: widest and always-plausible catch-all, so a bad value degrades instead of breaking.
 DEFAULT_SCENE = "港城"
+
+#: What the player sees on a visit with no offline period to show — the opening shot.
+#: Deliberately *not* DEFAULT_SCENE: those are unrelated jobs, and sharing one constant
+#: meant the game opened on a city panorama by accident rather than by choice. 陌洲
+#: repairs old life-support systems for a living, so his workshop is both the most
+#: personal scene and the one that says who he is without a line of dialogue.
+OPENING_SCENE = "工作間"
 
 
 @dataclass

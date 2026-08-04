@@ -16,6 +16,7 @@ import pytest
 from conftest import FakeLLMClient
 
 from everliving import db, logs, web
+from everliving.offline import DEFAULT_SCENE, OPENING_SCENE
 
 
 @pytest.fixture
@@ -82,6 +83,23 @@ def test_say_returns_the_reply_and_the_current_state(session):
     assert "state" in payload and "threads" in payload
 
 
+def test_a_visit_with_no_offline_period_opens_in_the_workshop(session):
+    """The opening shot and the can't-draw-that fallback used to be the same constant,
+    so a first visit landed on the city panorama by accident rather than by choice.
+    陌洲 repairs things for a living; his workshop says who he is, and it's a person's
+    own space rather than a wide view of somewhere."""
+    payload = session.open()
+
+    assert payload["scene"] == OPENING_SCENE == "工作間"
+
+
+def test_the_fallback_is_still_the_city_not_the_opening_shot(session):
+    """Splitting the two must not move the fallback: when the model names a place we
+    can't draw, the widest always-plausible scene is the right catch-all."""
+    assert DEFAULT_SCENE == "港城"
+    assert OPENING_SCENE != DEFAULT_SCENE
+
+
 def test_scene_defaults_when_the_model_names_a_place_we_cannot_draw(session):
     session.fake.reply = json.dumps(
         {"narrative": "夜裡漲潮。", "scene": "月球背面"}, ensure_ascii=False
@@ -91,7 +109,7 @@ def test_scene_defaults_when_the_model_names_a_place_we_cannot_draw(session):
 
     payload = session.open()
 
-    assert payload["scene"] == web.DEFAULT_SCENE
+    assert payload["scene"] == DEFAULT_SCENE
 
 
 def test_scene_passes_through_when_it_is_one_we_can_draw(session):

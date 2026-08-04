@@ -40,7 +40,7 @@ from everliving.llm import (
     make_client,
 )
 from everliving.offline import (
-    DEFAULT_SCENE,
+    OPENING_SCENE,
     is_worth_simulating,
     simulate_offline_period,
     time_since_last_seen,
@@ -108,7 +108,7 @@ class Session:
 
             payload = self.snapshot(conn)
             payload["offline"] = offline
-            payload["scene"] = offline["scene"] if offline else DEFAULT_SCENE
+            payload["scene"] = offline["scene"] if offline else OPENING_SCENE
             return payload
         finally:
             conn.close()
