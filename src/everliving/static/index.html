@@ -31,7 +31,14 @@
   }
 
   /* ---- the window ---- */
-  .scene{position:relative;height:42vh;min-height:260px;overflow:hidden;flex:none}
+  /* Height has to track width, not just viewport height. The picture is a 1000×420
+     viewBox drawn with `slice`, so on a wide short window the container's aspect runs
+     away from the artwork's and the crop eats the composition from both ends — at
+     1440×780 it took the workbench, the lamp and the man's legs. `max()` puts a floor
+     under the height that scales with the width, which costs nothing at ordinary
+     window shapes and stops the wide ones from cropping the scene in half. */
+  .scene{position:relative;height:max(42vh,26vw);max-height:62vh;min-height:260px;
+         overflow:hidden;flex:none}
   .scene svg{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* A seam of light along the sill: the room is darker than what's outside it. */
   .scene::after{
@@ -396,6 +403,15 @@
      a window and lit from inside; an exterior is built out of towers, gantries or
      scrap. The old version drew the workshop as a skyline, which is why standing in
      someone's workroom looked like looking at a city. */
+  /* The band of the viewBox that survives on every window shape worth designing for.
+     `slice` crops height, so on a wide short window only a horizontal strip of the
+     1000×420 artwork is ever on screen. Measured rather than guessed: at 1440×780 the
+     visible strip is about 230 units centred on 210, and the old composition put the
+     workbench at 346–420 — entirely outside it. Anything that carries meaning goes in
+     here; sky, water and the dark bottom of the frame can spill past it, because
+     cropping those reads as framing rather than as loss. */
+  const SAFE = {top:108, bottom:308};
+
   const PLACES = {
     '港城':   {kind:'exterior', build:'city',    fg:'railing'},
     '潮線':   {kind:'exterior', build:'sparse',  fg:'posts'},
@@ -515,27 +531,38 @@
 
   /* Foreground: the edge of wherever you're standing. Nearly black, no detail — it's
      what gives the middle distance somewhere to sit behind. */
+  /* The near edge is where he stands, so its top lip has to be the bottom of SAFE:
+     on a wide window everything below that is cropped, and a figure standing on a
+     cropped ledge is a figure with no feet. Each kind hangs down to 420 from there,
+     which costs nothing — the part that gets cut is solid black either way. */
   function foreground(g, kind, r){
-    const f = '#020609';
+    const f = '#020609', lip = SAFE.bottom;
     if(kind === 'railing'){
-      g.appendChild(el('rect',{x:0, y:372, width:1000, height:48, fill:f}));
-      g.appendChild(el('rect',{x:0, y:352, width:1000, height:4, fill:f}));
-      for(let x=30;x<1000;x+=76) g.appendChild(el('rect',{x:x, y:352, width:5, height:26, fill:f}));
+      // Posts stand *above* the rail rather than hanging below it, and the deck is
+      // solid. The old railing let the background through between its balusters, which
+      // was invisible against black water at the bottom of the frame and turned into a
+      // row of bright slots as soon as it moved up into the lit part of the harbour.
+      // Silhouetted against the water they read as posts; backlit they read as a bug.
+      g.appendChild(el('rect',{x:0, y:lip+4, width:1000, height:416-lip, fill:f}));
+      g.appendChild(el('rect',{x:0, y:lip, width:1000, height:5, fill:f}));
+      for(let x=30;x<1000;x+=76) g.appendChild(el('rect',{x:x, y:lip-22, width:5, height:24, fill:f}));
     } else if(kind === 'posts'){
-      g.appendChild(el('rect',{x:0, y:392, width:1000, height:28, fill:f}));
+      g.appendChild(el('rect',{x:0, y:lip+12, width:1000, height:408-lip, fill:f}));
       for(let i=0;i<5;i++){
         const x = 60 + r()*880, h = 60 + r()*80;
-        g.appendChild(el('rect',{x:x.toFixed(1), y:(400-h).toFixed(1), width:9, height:h.toFixed(1), fill:f}));
+        g.appendChild(el('rect',{x:x.toFixed(1), y:(lip+20-h).toFixed(1), width:9,
+                                 height:h.toFixed(1), fill:f}));
       }
     } else if(kind === 'heap'){
-      let d = 'M0 420 L0 386';
-      for(let x=0;x<=1000;x+=50) d += ` L${x} ${(380 + Math.sin(x/61)*14 + (r()-.5)*18).toFixed(1)}`;
+      let d = `M0 420 L0 ${lip+6}`;
+      for(let x=0;x<=1000;x+=50) d += ` L${x} ${(lip + Math.sin(x/61)*14 + (r()-.5)*18).toFixed(1)}`;
       d += ' L1000 420 Z';
       g.appendChild(el('path',{d:d, fill:f}));
     } else if(kind === 'pipes'){
-      g.appendChild(el('rect',{x:0, y:388, width:1000, height:32, fill:f}));
-      g.appendChild(el('rect',{x:0, y:364, width:1000, height:13, fill:f}));
-      for(let x=80;x<1000;x+=150) g.appendChild(el('rect',{x:x, y:364, width:15, height:34, fill:f}));
+      g.appendChild(el('rect',{x:0, y:lip+4, width:1000, height:416-lip, fill:f}));
+      g.appendChild(el('rect',{x:0, y:lip, width:1000, height:13, fill:f}));
+      for(let x=80;x<1000;x+=150)
+        g.appendChild(el('rect',{x:x, y:lip-30, width:15, height:34, fill:f}));
     }
   }
 
@@ -562,39 +589,45 @@
     }
 
     if(room === 'bench'){
-      // a workbench across the bottom, things half-dismantled on it, a hung lamp
-      near.appendChild(el('rect',{x:0, y:352, width:1000, height:68, fill:dark}));
-      near.appendChild(el('rect',{x:0, y:346, width:1000, height:8, fill:f}));
+      // A workbench, things half-dismantled on it, a hung lamp. Everything here sits
+      // inside SAFE, because this is the opening shot and the bench is the whole of
+      // what it says about him — a wide window used to crop it away entirely and
+      // leave a glow with no lamp above a man with no legs.
+      const top = SAFE.bottom;
+      near.appendChild(el('rect',{x:0, y:top, width:1000, height:420-top, fill:dark}));
+      near.appendChild(el('rect',{x:0, y:top-6, width:1000, height:8, fill:f}));
       let x = 60;
       while(x < 940){
         const w = 22+r()*54, h = 12+r()*46;
-        near.appendChild(el('rect',{x:x.toFixed(1), y:(346-h).toFixed(1),
+        near.appendChild(el('rect',{x:x.toFixed(1), y:(top-6-h).toFixed(1),
                                     width:w.toFixed(1), height:h.toFixed(1), fill:dark}));
-        if(r()<.3) near.appendChild(el('circle',{cx:(x+w/2).toFixed(1), cy:(346-h-5).toFixed(1),
+        if(r()<.3) near.appendChild(el('circle',{cx:(x+w/2).toFixed(1), cy:(top-11-h).toFixed(1),
                                      r:2, fill:'#4a8a86', opacity:.75}));
         x += w + 18 + r()*54;
       }
-      near.appendChild(el('rect',{x:206, y:0, width:2, height:64, fill:f}));
-      near.appendChild(el('ellipse',{cx:207, cy:70, rx:22, ry:9, fill:f}));
-      near.appendChild(el('ellipse',{cx:207, cy:150, rx:190, ry:150, fill:'url(#lampGlow)'}));
+      near.appendChild(el('rect',{x:206, y:0, width:2, height:104, fill:f}));
+      near.appendChild(el('ellipse',{cx:207, cy:110, rx:22, ry:9, fill:f}));
+      near.appendChild(el('ellipse',{cx:207, cy:190, rx:190, ry:150, fill:'url(#lampGlow)'}));
       // at the bench, turned toward the lamp: you arrive while he is already working
-      figure(near, 430, 352, 190, true);
+      figure(near, 430, top, SAFE.bottom - SAFE.top - 8, true);
     } else {
-      // switchgear: cabinet rows and a wall of status lamps that are actually running
-      near.appendChild(el('rect',{x:0, y:300, width:1000, height:120, fill:dark}));
+      // switchgear: cabinet rows and a wall of status lamps that are actually running.
+      // The lamps are the point of the room, so their row sits inside SAFE too.
+      const cab = SAFE.bottom - 56;
+      near.appendChild(el('rect',{x:0, y:cab, width:1000, height:420-cab, fill:dark}));
       for(let i=0;i<7;i++){
         const x = 30 + i*140;
-        near.appendChild(el('rect',{x:x, y:300, width:104, height:120, fill:f}));
+        near.appendChild(el('rect',{x:x, y:cab, width:104, height:420-cab, fill:f}));
         for(let j=0;j<4;j++){
-          const c = el('circle',{cx:x+18+j*23, cy:322, r:3,
+          const c = el('circle',{cx:x+18+j*23, cy:cab+22, r:3,
                        fill: r()<.35 ? '#d2452f' : '#4a8a86', opacity:.85});
           if(r()<.3) c.appendChild(el('animate',{attributeName:'opacity',
                        values:'.85;.1;.85', dur:(2+r()*4).toFixed(1)+'s', repeatCount:'indefinite'}));
           near.appendChild(c);
         }
       }
-      near.appendChild(el('ellipse',{cx:500, cy:330, rx:300, ry:120, fill:'url(#lampGlow)'}));
-      figure(near, 640, 420, 170, true);
+      near.appendChild(el('ellipse',{cx:500, cy:cab+30, rx:300, ry:120, fill:'url(#lampGlow)'}));
+      figure(near, 640, SAFE.bottom, SAFE.bottom - SAFE.top - 30, true);
     }
   }
 
@@ -678,10 +711,11 @@
     } else if(action === '淹水'){
       // Water above where it should be. Drawn over the foreground on purpose — the
       // point is that it's reached somewhere it doesn't belong.
-      g.appendChild(el('rect',{x:0, y:300, width:1000, height:120, fill:'#0f2a33', opacity:.72}));
+      const top = SAFE.bottom - 16;   // the surface has to be visible to read as risen
+      g.appendChild(el('rect',{x:0, y:top, width:1000, height:420-top, fill:'#0f2a33', opacity:.72}));
       const line = el('path',{d:'', fill:'none', stroke:'#6fa8b5', 'stroke-width':1.2, opacity:.6});
-      let d = 'M0 300';
-      for(let x=0;x<=1000;x+=18) d += ` L${x} ${(300+Math.sin(x/45)*3).toFixed(1)}`;
+      let d = `M0 ${top}`;
+      for(let x=0;x<=1000;x+=18) d += ` L${x} ${(top+Math.sin(x/45)*3).toFixed(1)}`;
       line.setAttribute('d', d);
       g.appendChild(line);
     } else if(action === '起霧'){
@@ -715,7 +749,7 @@
      the frame. When something is happening it leans toward it instead — the cheapest
      honest version of putting the camera where the event is, and the reason the drift
      above is worth having at all: a camera that never moves has nowhere to move to. */
-  const FOCUS = {'焊接':[430,300], '停電':[820,120], '淹水':[500,344], '起霧':[500,210]};
+  const FOCUS = {'焊接':[430,300], '停電':[820,120], '淹水':[500,296], '起霧':[500,210]};
   function aim(action){
     const f = FOCUS[action] || [500,210];
     $('camera').style.transformOrigin = f[0]+'px '+f[1]+'px';
@@ -764,8 +798,9 @@
       BUILDERS[spec.build](mid_, rng(hash(scene)+31), {baseline:level+4, fill:mix(bot,'#030b10',.88), lit:dark, density:.18, tall:true});
       $('haze').setAttribute('y', 140); $('haze').setAttribute('height', 120);
       foreground(near, spec.fg, rng(hash(scene)+77));
-      // One person against the whole harbour. Without him the skyline has no size.
-      figure(near, 190 + r()*120, spec.fg==='posts' ? 396 : 374, 108, false);
+      // One person against the whole harbour. Without him the skyline has no size —
+      // which is exactly why he stands on the lip of SAFE rather than below it.
+      figure(near, 190 + r()*120, SAFE.bottom + (spec.fg==='posts' ? 18 : 2), 108, false);
       // The water mirrors the mid layer. A harbour without a reflection reads as a poster.
       refl.appendChild(mid_.cloneNode(true));
       refl.setAttribute('transform', `translate(0 ${(level*2).toFixed(1)}) scale(1 -1)`);
