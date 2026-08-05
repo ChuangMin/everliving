@@ -142,6 +142,41 @@ def test_hallucinated_thread_id_is_ignored(conn):
     assert [thread["id"] for thread in remaining] == [real_id]
 
 
+# --- threads have to be able to close (T0-17) ------------------------------
+#
+# The 2026-08-05 rehearsal ran four steps and closed nothing: the last offline
+# period picked up the player's promise correctly, then filed it as a *second*
+# thread restating the first. Two near-identical rows, `resolved` at 0 forever,
+# and a conversation prompt that grows every night. Asserting the instruction is
+# present is all a test can do — whether the model obeys is what a real run is
+# for — but the instruction being conditional is testable and matters.
+
+
+def test_offline_prompt_forbids_restating_an_open_thread(conn):
+    agent_id = persona.seed_default_agent(conn)
+    db.add_open_thread(conn, agent_id, "我需要你幫忙弄到一個壓力閥。")
+    llm = FakeLLMClient(reply=_response(open_thread=None))
+
+    simulate_offline_period(conn, agent_id, llm, timedelta(days=1))
+
+    system_prompt, _ = llm.calls[0]
+    assert "同一件事" in system_prompt
+    # The "usually leave a thread behind" default is what produced the duplicate,
+    # so it has to be the branch that's replaced, not one the model sees as well.
+    assert "通常要留下一件" not in system_prompt
+
+
+def test_offline_prompt_asks_for_a_thread_when_nothing_is_open(conn):
+    agent_id = persona.seed_default_agent(conn)
+    llm = FakeLLMClient(reply=_response())
+
+    simulate_offline_period(conn, agent_id, llm, timedelta(days=1))
+
+    system_prompt, _ = llm.calls[0]
+    assert "通常要留下一件" in system_prompt
+    assert "同一件事" not in system_prompt
+
+
 # --- the hook actually reaching the player ---------------------------------
 
 

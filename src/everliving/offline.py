@@ -163,6 +163,26 @@ def _build_prompts(
     state: dict[str, str],
     threads: list[dict],
 ) -> tuple[str, str]:
+    # Two different jobs, so two different rules. With nothing open, the thread is
+    # what gives the player a reason to come back. With something already open,
+    # asking for another one is what produced the failure this branch exists for:
+    # a rehearsal ran four steps, correctly picked up what the player had promised,
+    # and filed it as a *second* thread restating the first — so `resolved` stayed
+    # at 0, the panel showed the same待辦 twice, and every night made the
+    # conversation prompt longer. The default has to invert once something is open.
+    if threads:
+        thread_rule = (
+            "2. **你已經有還沒解決的事了,而它的下一步就是這段時間最該發生的東西。**"
+            "預設是把那件事**往前推**,不是再開一條:發展寫進 events 跟 narrative,"
+            "open_thread 填 null。真的另外冒出一件不相干的事,才開新的一條。\n"
+            "**同一件事換句話說寫成一條新的懸念,在玩家眼裡就是這件事永遠不會結束。**\n"
+        )
+    else:
+        thread_rule = (
+            "2. 通常要留下一件**懸而未決、需要玩家回應的事**(open_thread)。"
+            "這是玩家下次想回來的理由。但不要每次都硬塞,沒有就填 null。\n"
+        )
+
     system_prompt = (
         f"你是{agent['name']}。背景:{agent['background']}\n"
         f"個性:{agent['personality']}\n\n"
@@ -170,8 +190,7 @@ def _build_prompts(
         "規則:\n"
         "1. 必須有具體後果——你得到或失去了什麼、做了一個決定、跟誰起了衝突或建立了關係。"
         "不可以只是『我過得還好』這種沒有後果的描述。\n"
-        "2. 通常要留下一件**懸而未決、需要玩家回應的事**(open_thread)。"
-        "這是玩家下次想回來的理由。但不要每次都硬塞,沒有就填 null。\n"
+        f"{thread_rule}"
         "3. 如果既有的未解事項已經因為這段時間的發展而結束,把它的 id 放進 resolved_thread_ids。\n\n"
         "4. **所有文字一律用繁體中文,包括 state_changes 的鍵名**"
         "(要寫「手部狀態」不是 physical_status)。玩家看得到這些鍵名。\n\n"
