@@ -188,5 +188,27 @@ try {
   check(true, 'an error payload is handled without throwing');
 } catch (e) { check(false, `error payload threw: ${e.message}`); }
 
+// Pressing "let the AI play" and getting silence is a failure mode this project has
+// already lost a playtest to. An error the server could not turn into a turn comes
+// back with no `auto` block, and the switch used to flip itself off without a word.
+//
+// Needs a fetch that settles, unlike the one above — and settles *synchronously*, so
+// the assertion runs before this script exits.
+function settled(value){
+  return {
+    then(f){ const r = f(value); return (r && typeof r.then === 'function') ? r : settled(r); },
+    catch(){ return this; },
+    finally(f){ f(); return this; },
+  };
+}
+try {
+  nodes.get('err')._t = '';
+  global.fetch = () => settled({json: () => settled({error: '額度用完了。'})});
+  globalThis.__setAuto(true);
+  check(nodes.get('err').textContent === '額度用完了。'
+        && nodes.get('autoBtn').textContent === '讓 AI 代打',
+        'an autoplay error is shown rather than swallowed');
+} catch (e) { check(false, `autoplay error path threw: ${e.message}`); }
+
 console.log(bad ? `\n${bad} FAILURES` : '\nall page checks passed');
 process.exit(bad ? 1 : 0);

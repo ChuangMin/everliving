@@ -1060,7 +1060,16 @@
           ? data.error
           : `AI 代打中——還剩 ${left} 輪(上限 ${data.auto.cap})。`;
       }
-      if(data.error){ setAuto(false); return; }
+      if(data.error){
+        // An error with no `auto` block — a dead key, a rate limit, anything the
+        // server couldn't turn into a turn — used to flip the switch back and say
+        // nothing whatever. Pressing the button and getting silence is the exact
+        // failure mode this project has already lost a playtest to. Errors go in
+        // the error box; only the cap message belongs in the note beside it.
+        if(!data.auto) fail(data.error);
+        setAuto(false);
+        return;
+      }
       if(data.visitor) turn('訪客(AI)', data.visitor, true);
       if(apply(data) && data.reply) turn($('who').textContent, data.reply, false, data.assets);
       // A beat between turns: without it the whole exchange lands as one wall of text.

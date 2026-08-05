@@ -357,6 +357,12 @@ def _parse_args(argv):
     )
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument(
+        "--db",
+        default="everliving.db",
+        metavar="PATH",
+        help="跑在哪個資料庫。想看畫面又不想動到真的那份記憶時用另一個檔。",
+    )
+    parser.add_argument(
         "--auto-turns",
         type=int,
         default=6,
@@ -385,7 +391,7 @@ def main(argv=None) -> None:
 
     try:
         session = Session(
-            "everliving.db", args.provider, args.offline_hours, auto_cap=args.auto_turns
+            args.db, args.provider, args.offline_hours, auto_cap=args.auto_turns
         )
     except (LLMAuthError, LLMUnavailable) as exc:
         # This is where a dead key lands. It used to be visible only as a red string

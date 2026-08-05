@@ -54,3 +54,15 @@ def test_the_visitor_turn_is_logged_as_machine_driven(conn):
 
     purposes = [r["purpose"] for r in conn.execute("SELECT purpose FROM llm_calls")]
     assert purposes == ["auto_visitor"]
+
+
+def test_the_visitor_can_ask_him_to_do_something(conn, fake_llm):
+    """A stand-in for the player needs the player's affordances. Delegation is the
+    control model, so a visitor that can only make small talk exercises half the
+    system and then reports that half as though it were the whole."""
+    agent_id = persona.seed_default_agent(conn)
+
+    visitor.next_message(conn, agent_id, fake_llm)
+
+    system_prompt, _ = fake_llm.calls[0]
+    assert "請他幫你去做一件事" in system_prompt
