@@ -188,6 +188,31 @@ def test_scene_passes_through_when_it_is_one_we_can_draw(session):
     assert session.open()["scene"] == "回收場"
 
 
+def test_a_night_can_say_what_was_happening_not_only_where(session):
+    """The offline path had `scene` but no `action`, so a night spent in a blackout
+    opened on a calmly lit workshop. The page reads `action` at the top level, which
+    is where it has to arrive."""
+    session.fake.reply = json.dumps(
+        {"narrative": "整層樓的燈都滅了。", "scene": "配電所", "action": "停電"},
+        ensure_ascii=False,
+    )
+    session.leave()
+    _backdate(session, hours=24)
+
+    payload = session.open()
+
+    assert payload["action"] == "停電"
+    assert payload["offline"]["action"] == "停電"
+
+
+def test_a_quiet_night_reports_no_action_rather_than_omitting_it(session):
+    """Null is a real value here — it's how the picture is told to go back to nothing
+    in particular. Omitting the key would leave the last action stuck on screen."""
+    payload = session.open()
+
+    assert "action" in payload and payload["action"] is None
+
+
 # --- one real trip over a socket ---------------------------------------------
 
 

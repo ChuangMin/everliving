@@ -51,6 +51,7 @@ global.document = {
   createTextNode(){ return makeNode('#text'); },
   title: '',
 };
+global.location = { search: '' };             // the ?scene= hook reads this on boot
 global.fetch = () => new Promise(() => {});   // boot path stays pending, never resolves
 global.setInterval = () => 0;
 global.addEventListener = () => {};
@@ -76,6 +77,31 @@ for(const scene of ['工作間','配電所','港城','潮線','回收場','機�
 globalThis.__draw('港城'); const a = nodes.get('mid').children.length;
 globalThis.__draw('港城'); const b = nodes.get('mid').children.length;
 check(a === b, `scene is stable across redraws (${a} vs ${b})`);
+
+// The water has to run continuously, and continuity is a property of the geometry
+// the CSS then slides: the path must extend a full wave period past both edges, or
+// the loop shows a bare gap when it reaches the end of its travel.
+const PERIOD = 2 * Math.PI * 68;
+const waveX = nodes.get('wave').getAttribute('d')
+  .split(/[ML]/).slice(1).map(s => parseFloat(s.trim().split(' ')[0]));
+check(Math.min(...waveX) <= 0 && Math.max(...waveX) >= 1000 + PERIOD,
+      `wave spans ${Math.min(...waveX)}..${Math.max(...waveX)}, covering a ${PERIOD.toFixed(0)}-unit slide`);
+
+// The glints on the water were the one thing still reshuffling on every redraw,
+// which read as a stutter rather than as water.
+globalThis.__draw('潮線'); const s1 = nodes.get('shimmer').children.map(n => n.getAttribute('x'));
+globalThis.__draw('潮線'); const s2 = nodes.get('shimmer').children.map(n => n.getAttribute('x'));
+check(s1.length > 0 && s1.join() === s2.join(),
+      `water glints are stable across redraws (${s1.length} of them)`);
+
+// The camera leans toward whatever is happening. Without this the drift is decoration;
+// with it, it's the thing that can carry the player's eye to an event.
+globalThis.__draw('工作間', '停電');
+const aimed = nodes.get('camera').style.transformOrigin;
+globalThis.__draw('工作間', null);
+const idle = nodes.get('camera').style.transformOrigin;
+check(aimed === '820px 120px' && idle === '500px 210px',
+      `camera aims at the action (${aimed}) and returns to centre (${idle})`);
 
 try {
   globalThis.__apply({

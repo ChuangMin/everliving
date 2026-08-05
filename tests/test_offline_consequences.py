@@ -54,6 +54,18 @@ def test_non_dict_state_changes_ignored():
     assert parse_offline_response(_response(state_changes=["nope"])).state_changes == {}
 
 
+def test_parses_action_from_the_closed_vocabulary():
+    assert parse_offline_response(_response(action="停電")).action == "停電"
+
+
+def test_unknown_action_degrades_to_nothing_in_particular():
+    """No fallback here, unlike scene: inventing weather the narrative never mentioned
+    is worse than showing the place calm."""
+    assert parse_offline_response(_response(action="下雪")).action is None
+    assert parse_offline_response(_response(action=None)).action is None
+    assert parse_offline_response(_response()).action is None
+
+
 # --- persistence -----------------------------------------------------------
 
 

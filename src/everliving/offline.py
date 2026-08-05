@@ -16,6 +16,7 @@ from everliving import db
 from everliving.llm import LLMClient, log_usage
 
 
+
 #: Below this, "you were away" isn't true enough to be worth a story.
 #: Without a floor, quitting and relaunching immediately fires a full simulation —
 #: which bills an LLM call, invents a whole offline period, and adds a thread for an
@@ -65,6 +66,11 @@ class OfflineResult:
     open_thread: str | None = None
     resolved_thread_ids: list[int] = field(default_factory=list)
     scene: str = DEFAULT_SCENE
+    #: What was happening, as opposed to where. The conversation path has had this
+    #: since the player noticed the picture disagreeing with the words; the offline
+    #: path never did, so a night could say it was spent in the workshop but never
+    #: that the lights were out the whole time. None means nothing in particular.
+    action: str | None = None
     #: The `memory_events` row this narrative was stored as — the anchor a video, a
     #: still or a written page attaches to later (see the design doc, 第五節). None
     #: when the result was parsed but never persisted.
@@ -146,6 +152,12 @@ def parse_offline_response(raw: str) -> OfflineResult:
     if scene not in SCENES:  # an unknown place would draw nothing at all
         scene = DEFAULT_SCENE
 
+    # Unlike scene, this has no fallback: "nothing in particular is happening" is a
+    # real state of the picture, so an unrecognised value degrades to it rather than
+    # to some default weather the narrative never mentioned.
+    action = str(parsed.get("action") or "").strip()
+    action = action if action in ACTIONS else None
+
     return OfflineResult(
         narrative=narrative,
         events=events,
@@ -153,6 +165,7 @@ def parse_offline_response(raw: str) -> OfflineResult:
         open_thread=open_thread,
         resolved_thread_ids=resolved_thread_ids,
         scene=scene,
+        action=action,
     )
 
 
@@ -201,7 +214,9 @@ def _build_prompts(
         '  "state_changes": {"中文狀態名": "中文的新值"},\n'
         '  "open_thread": "需要玩家回應的懸念,或 null",\n'
         '  "resolved_thread_ids": [已解決的既有事項 id],\n'
-        f'  "scene": "這段敘事主要發生在哪,只能從這幾個選一個:{"、".join(SCENES)}"\n'
+        f'  "scene": "這段敘事主要發生在哪,只能從這幾個選一個:{"、".join(SCENES)}",\n'
+        f'  "action": "這段時間主要在發生什麼,只能從這幾個選一個:{"、".join(ACTIONS)};'
+        '沒有特別在發生什麼就填 null"\n'
         "}"
     )
 

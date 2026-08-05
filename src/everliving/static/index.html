@@ -39,6 +39,41 @@
     background:linear-gradient(90deg,transparent,rgba(240,180,92,.35),transparent);
   }
 
+  /* ---- continuous motion ----------------------------------------------------
+     What the page was missing wasn't detail, it was that nothing moved between
+     redraws: a still image swapped for another still image every 30 seconds. The
+     fluidity worth copying comes from the camera never quite stopping, so the
+     layers drift at different rates (near travels most, far least, which is the
+     whole of parallax), the water runs continuously, and the frame creeps in and
+     out on a cycle far too slow to watch happen.
+
+     All of it is CSS on purpose. The reduced-motion rule at the bottom of this
+     sheet is a CSS rule, so motion written in SMIL would sail straight past it —
+     and this is the layer that would make someone seasick, not a blinking window.
+
+     Every drifting layer carries a scale, because a layer that travels sideways
+     inside a fixed viewBox will show you the edge of the world otherwise. Amplitude
+     always stays well inside the overscan the scale buys. */
+  #camera,.drift{transform-box:view-box;transform-origin:500px 210px}
+  /* Not a loop: `alternate` means it breathes in and out instead of snapping back
+     to the start every cycle, which is the one thing that would read as a glitch. */
+  #camera{animation:push 240s ease-in-out infinite alternate}
+  @keyframes push{from{transform:scale(1)}to{transform:scale(1.04)}}
+  #farDrift{animation:driftFar 190s ease-in-out infinite alternate}
+  #midDrift{animation:driftMid 145s ease-in-out infinite alternate}
+  #nearDrift{animation:driftNear 105s ease-in-out infinite alternate}
+  @keyframes driftFar {from{transform:scale(1.03) translateX(3px)}  to{transform:scale(1.03) translateX(-3px)}}
+  @keyframes driftMid {from{transform:scale(1.04) translateX(6px)}  to{transform:scale(1.04) translateX(-6px)}}
+  @keyframes driftNear{from{transform:scale(1.05) translateX(11px)} to{transform:scale(1.05) translateX(-11px)}}
+  /* Exactly one wave period (2π × 68 user units), so the water can run in one
+     direction forever without a visible seam where the loop restarts. The path is
+     drawn wide enough to still cover the frame at the end of that travel. */
+  #waveDrift{animation:flow 17s linear infinite}
+  @keyframes flow{from{transform:translateX(0)}to{transform:translateX(-427.26px)}}
+  /* The surface, moving against the body of water underneath it. */
+  #shimmerDrift{animation:surface 44s ease-in-out infinite alternate}
+  @keyframes surface{from{transform:translateX(-9px)}to{transform:translateX(9px)}}
+
   /* Instrument chrome. 陌洲 repairs machines for a living, so every label on this
      page is stencilled equipment lettering, and the prose is the only thing that
      isn't. That split is the whole typographic idea. */
@@ -211,24 +246,35 @@
       <clipPath id="waterClip"><rect id="waterClipRect" x="0" y="250" width="1000" height="170"/></clipPath>
     </defs>
 
-    <rect width="1000" height="420" fill="url(#skyGrad)"/>
-    <circle id="sun" cx="770" cy="90" r="17" fill="#e8d7ae" opacity=".45"/>
-    <circle id="sunHalo" cx="770" cy="90" r="52" fill="#e8d7ae" opacity=".07" filter="url(#soften)"/>
+    <!-- Everything inside the camera moves; rain, the action overlay, grain and the
+         vignette stay bolted to the frame because they are the frame, not the world.
+         The drift wrappers exist so the drawing code can keep clearing #far/#mid/#near
+         thirty seconds at a time without ever interrupting the motion. -->
+    <g id="camera">
+      <rect width="1000" height="420" fill="url(#skyGrad)"/>
+      <circle id="sun" cx="770" cy="90" r="17" fill="#e8d7ae" opacity=".45"/>
+      <circle id="sunHalo" cx="770" cy="90" r="52" fill="#e8d7ae" opacity=".07" filter="url(#soften)"/>
 
-    <g id="far"></g>
-    <rect id="haze" x="0" y="120" width="1000" height="150" fill="url(#hazeGrad)"/>
-    <g id="mid"></g>
+      <g id="farDrift" class="drift"><g id="far"></g></g>
+      <rect id="haze" x="0" y="120" width="1000" height="150" fill="url(#hazeGrad)"/>
 
-    <g id="sea">
-      <rect id="waterRect" x="0" y="250" width="1000" height="170" fill="url(#waterGrad)"/>
-      <g clip-path="url(#waterClip)">
-        <g id="reflection" opacity=".2" filter="url(#reflectBlur)"></g>
-        <g id="shimmer"></g>
+      <!-- The sea drifts with the middle distance, not on its own: the reflection is a
+           clone of that layer, so anything that moves one has to move the other or the
+           harbour stops standing on its own reflection. -->
+      <g id="midDrift" class="drift">
+        <g id="mid"></g>
+        <g id="sea">
+          <rect id="waterRect" x="0" y="250" width="1000" height="170" fill="url(#waterGrad)"/>
+          <g clip-path="url(#waterClip)">
+            <g id="reflection" opacity=".2" filter="url(#reflectBlur)"></g>
+            <g id="shimmerDrift"><g id="shimmer"></g></g>
+          </g>
+          <g id="waveDrift"><path id="wave" d="" fill="none" stroke="#4d8090" stroke-width="1" opacity=".45"/></g>
+        </g>
       </g>
-      <path id="wave" d="" fill="none" stroke="#4d8090" stroke-width="1" opacity=".45"/>
-    </g>
 
-    <g id="near"></g>
+      <g id="nearDrift" class="drift"><g id="near"></g></g>
+    </g>
     <g id="rain" opacity=".5"></g>
     <g id="action"></g>
     <rect id="grainRect" width="1000" height="420" filter="url(#grain)" opacity=".045"/>
@@ -665,6 +711,16 @@
     }
   }
 
+  /* Where the camera's slow push is aimed. Idle, it breathes around the middle of
+     the frame. When something is happening it leans toward it instead — the cheapest
+     honest version of putting the camera where the event is, and the reason the drift
+     above is worth having at all: a camera that never moves has nowhere to move to. */
+  const FOCUS = {'焊接':[430,300], '停電':[820,120], '淹水':[500,344], '起霧':[500,210]};
+  function aim(action){
+    const f = FOCUS[action] || [500,210];
+    $('camera').style.transformOrigin = f[0]+'px '+f[1]+'px';
+  }
+
   /* ---- draw ---- */
   let currentScene = '工作間', currentAction = null;
 
@@ -714,11 +770,15 @@
       refl.appendChild(mid_.cloneNode(true));
       refl.setAttribute('transform', `translate(0 ${(level*2).toFixed(1)}) scale(1 -1)`);
       refl.setAttribute('opacity', dark ? .26 : .16);
+      // Seeded like everything else in the scene. Unseeded, the 30-second redraw
+      // reshuffled every glint on the water — a visible stutter, and precisely the
+      // stepped quality the motion above exists to get rid of.
+      const sr = rng(hash(scene)+53);
       for(let i=0;i<34;i++){
-        const y = level + 6 + Math.pow(Math.random(), 1.7)*150;
-        shim.appendChild(el('rect',{x:(Math.random()*1000).toFixed(1), y:y.toFixed(1),
-          width:(10+Math.random()*70).toFixed(1), height:1,
-          fill:dark?'#f0b45c':'#9fc4cc', opacity:(0.04+Math.random()*0.12).toFixed(2)}));
+        const y = level + 6 + Math.pow(sr(), 1.7)*150;
+        shim.appendChild(el('rect',{x:(sr()*1000).toFixed(1), y:y.toFixed(1),
+          width:(10+sr()*70).toFixed(1), height:1,
+          fill:dark?'#f0b45c':'#9fc4cc', opacity:(0.04+sr()*0.12).toFixed(2)}));
       }
     }
 
@@ -727,9 +787,13 @@
     $('waterClipRect').setAttribute('y', level.toFixed(1));
     $('waterClipRect').setAttribute('height', (420-level).toFixed(1));
 
-    let d = 'M0 '+level.toFixed(1);
-    for(let x=0;x<=1000;x+=20){
-      d += ' L'+x+' '+(level + Math.sin(x/68 + now.getMinutes()/9)*2.4).toFixed(1);
+    // Drawn well past both edges so the CSS flow can carry it a full wave period
+    // without running out of path. The phase is pure geometry now — it used to come
+    // from the wall clock, which meant the water jumped a step on every redraw
+    // instead of moving, and jumping is the opposite of what water does.
+    let d = 'M-460 '+level.toFixed(1);
+    for(let x=-460;x<=1500;x+=20){
+      d += ' L'+x+' '+(level + Math.sin(x/68)*2.4).toFixed(1);
     }
     $('wave').setAttribute('d', d);
 
@@ -738,9 +802,20 @@
 
     $('clockTime').textContent = now.toTimeString().slice(0,5);
     $('clockTide').textContent = (tide>0.5 ? '漲潮' : '退潮') + ' ' + Math.round(tide*100) + '%';
-    overlay(action !== undefined ? action : currentAction);
-    $('place').textContent = scene + (currentAction ? '・' + currentAction : '');
+    const act = action !== undefined ? action : currentAction;
+    overlay(act);
+    aim(act);
+    $('place').textContent = scene + (act ? '・' + act : '');
   }
+
+  /* A hook for looking at the picture, not a feature. `?scene=…&action=…` renders any
+     place and any state of the world with no server and no model call behind it.
+     Without it the scene is only reachable by playing, and a stub DOM can prove the
+     drawing code runs but never that what it draws is right — which is how a page can
+     pass every check and still be wrong on screen. */
+  const q = new URLSearchParams(location.search);
+  if(PLACES[q.get('scene')]) currentScene = q.get('scene');
+  if(q.get('action')) currentAction = q.get('action');
 
   drawScene(currentScene);
   setInterval(()=>drawScene(currentScene, currentAction), 30000);

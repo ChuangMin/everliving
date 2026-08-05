@@ -13,3 +13,4 @@ build/
 dist/
 everliving.log
 *.log
+shots/

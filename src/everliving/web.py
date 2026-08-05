@@ -137,6 +137,7 @@ class Session:
                     "state_changes": result.state_changes,
                     "open_thread": result.open_thread,
                     "scene": result.scene,
+                    "action": result.action,
                     # The anchor for anything that later illustrates this beat. Sent
                     # now, while it's free, so the display side never has to identify
                     # a beat by matching its prose.
@@ -151,6 +152,11 @@ class Session:
             payload = self.snapshot(conn)
             payload["offline"] = offline
             payload["scene"] = offline["scene"] if offline else OPENING_SCENE
+            # Always sent, including as null, and at the top level where the page
+            # already reads it. Without this the night could name a place but never
+            # what was going on there — the picture opened on a calm workshop no
+            # matter what the narrative said had happened in it.
+            payload["action"] = offline["action"] if offline else None
             return payload
         finally:
             conn.close()
