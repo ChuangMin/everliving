@@ -92,6 +92,13 @@ class Session:
             "name": self.agent["name"],
             "state": db.get_state(conn, self.agent_id),
             "threads": [t["description"] for t in db.get_open_threads(conn, self.agent_id)],
+            # What you asked him for and haven't got an answer to yet. The other
+            # direction from `threads`, and the only place the player can check what
+            # they're owed — a delegation is settled while they're away, so without
+            # this it exists nowhere they can see between asking and finding out.
+            "delegations": [
+                d["request"] for d in db.get_pending_delegations(conn, self.agent_id)
+            ],
             "ledger": self.ledger(conn),
         }
 
@@ -138,6 +145,10 @@ class Session:
                     "open_thread": result.open_thread,
                     "scene": result.scene,
                     "action": result.action,
+                    # How what you asked for turned out. Sent alongside the narrative
+                    # rather than folded into it: the prose can mention it or not, but
+                    # "you asked, here is the answer" has to survive either way.
+                    "delegation_outcomes": result.delegation_outcomes,
                     # The anchor for anything that later illustrates this beat. Sent
                     # now, while it's free, so the display side never has to identify
                     # a beat by matching its prose.

@@ -49,6 +49,22 @@ CREATE TABLE IF NOT EXISTS open_threads (
     resolved_at TEXT
 );
 
+-- What the player has asked him to do. The control model is delegation (設計文件
+-- 第十二節): you never move anyone, you ask, and it gets carried out — or refused —
+-- while you're away. Kept apart from open_threads because the direction is opposite:
+-- a thread is what he's waiting on you for, a delegation is what you're waiting on
+-- him for. And a delegation has an outcome, which is the whole point of it; a thread
+-- only has a status.
+CREATE TABLE IF NOT EXISTS delegations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL REFERENCES agents(id),
+    request TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',   -- pending / done / refused
+    outcome TEXT,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS llm_calls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id INTEGER REFERENCES agents(id),
@@ -213,6 +229,42 @@ def resolve_thread(conn: sqlite3.Connection, thread_id: int) -> None:
     conn.execute(
         "UPDATE open_threads SET status = 'resolved', resolved_at = ? WHERE id = ?",
         (_now(), thread_id),
+    )
+    conn.commit()
+
+
+def add_delegation(conn: sqlite3.Connection, agent_id: int, request: str) -> int:
+    cur = conn.execute(
+        "INSERT INTO delegations (agent_id, request, status, created_at) "
+        "VALUES (?, ?, 'pending', ?)",
+        (agent_id, request, _now()),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_pending_delegations(
+    conn: sqlite3.Connection, agent_id: int, limit: int = 3
+) -> list[dict]:
+    """Oldest first: something asked for three nights ago should be settled before
+    something asked for just now, and the cap keeps the prompt (and the bill) bounded
+    the same way open threads are."""
+    rows = conn.execute(
+        "SELECT * FROM delegations WHERE agent_id = ? AND status = 'pending' "
+        "ORDER BY created_at ASC LIMIT ?",
+        (agent_id, limit),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def resolve_delegation(
+    conn: sqlite3.Connection, delegation_id: int, status: str, outcome: str
+) -> None:
+    """Close one out as done or refused. A refusal is an outcome, not a failure —
+    the design doc is explicit that it can say no, so long as it says why."""
+    conn.execute(
+        "UPDATE delegations SET status = ?, outcome = ?, resolved_at = ? WHERE id = ?",
+        (status, outcome, _now(), delegation_id),
     )
     conn.commit()
 

@@ -66,6 +66,10 @@ class OfflineResult:
     open_thread: str | None = None
     resolved_thread_ids: list[int] = field(default_factory=list)
     scene: str = DEFAULT_SCENE
+    #: How each thing the player asked for turned out: `{id, status, outcome}` with
+    #: status either `done` or `refused`. This is the whole of the delegation model —
+    #: you asked, you left, and this is what you come back to.
+    delegation_outcomes: list[dict] = field(default_factory=list)
     #: What was happening, as opposed to where. The conversation path has had this
     #: since the player noticed the picture disagreeing with the words; the offline
     #: path never did, so a night could say it was spent in the workshop but never
@@ -148,6 +152,24 @@ def parse_offline_response(raw: str) -> OfflineResult:
             except (TypeError, ValueError):
                 continue
 
+    outcomes = []
+    raw_outcomes = parsed.get("delegation_outcomes")
+    if isinstance(raw_outcomes, list):
+        for item in raw_outcomes:
+            if not isinstance(item, dict):
+                continue
+            try:
+                item_id = int(item.get("id"))
+            except (TypeError, ValueError):
+                continue
+            # Anything that isn't an explicit refusal counts as done. A status the
+            # model invented must not leave the errand hanging forever — an unparsable
+            # answer is still an answer that the night happened.
+            status = "refused" if str(item.get("status", "")).strip() == "refused" else "done"
+            outcome = str(item.get("outcome") or "").strip()
+            if outcome:
+                outcomes.append({"id": item_id, "status": status, "outcome": outcome})
+
     scene = str(parsed.get("scene") or "").strip()
     if scene not in SCENES:  # an unknown place would draw nothing at all
         scene = DEFAULT_SCENE
@@ -164,6 +186,7 @@ def parse_offline_response(raw: str) -> OfflineResult:
         state_changes=state_changes,
         open_thread=open_thread,
         resolved_thread_ids=resolved_thread_ids,
+        delegation_outcomes=outcomes,
         scene=scene,
         action=action,
     )
@@ -175,6 +198,7 @@ def _build_prompts(
     memory_text: str,
     state: dict[str, str],
     threads: list[dict],
+    delegations: list[dict] | None = None,
 ) -> tuple[str, str]:
     # Two different jobs, so two different rules. With nothing open, the thread is
     # what gives the player a reason to come back. With something already open,
@@ -196,6 +220,21 @@ def _build_prompts(
             "這是玩家下次想回來的理由。但不要每次都硬塞,沒有就填 null。\n"
         )
 
+    # Only present when there is something to settle. The refusal rules are the design
+    # doc's (第十二節): always obeying makes him a puppet and kills the one thing being
+    # sold, but refusing without a reason grounded in his own state reads as the system
+    # failing rather than as a person saying no. And a refusal has to leave something
+    # behind — he said no *because* of something, and that something is the new hook.
+    if delegations:
+        delegation_rule = (
+            "4. **玩家請你做的事,這段時間要有下場**,每一件都要出現在 delegation_outcomes。\n"
+            "   - 你**可以拒絕**,但理由必須來自你上面的狀態或你的個性,而且要讀起來像個人,不像系統失敗\n"
+            "   - **拒絕的那件事本身就是新的懸念**,所以 open_thread 不用再重複寫一次\n"
+            "   - 也可以做了但撞上別的事——那就是 done,結果寫實際發生的\n"
+        )
+    else:
+        delegation_rule = ""
+
     system_prompt = (
         f"你是{agent['name']}。背景:{agent['background']}\n"
         f"個性:{agent['personality']}\n\n"
@@ -204,7 +243,9 @@ def _build_prompts(
         "1. 必須有具體後果——你得到或失去了什麼、做了一個決定、跟誰起了衝突或建立了關係。"
         "不可以只是『我過得還好』這種沒有後果的描述。\n"
         f"{thread_rule}"
-        "3. 如果既有的未解事項已經因為這段時間的發展而結束,把它的 id 放進 resolved_thread_ids。\n\n"
+        "3. 如果既有的未解事項已經因為這段時間的發展而結束,把它的 id 放進 resolved_thread_ids。\n"
+        f"{delegation_rule}"
+        "\n"
         "4. **所有文字一律用繁體中文,包括 state_changes 的鍵名**"
         "(要寫「手部狀態」不是 physical_status)。玩家看得到這些鍵名。\n\n"
         "只輸出 JSON,不要有其他文字:\n"
@@ -214,6 +255,8 @@ def _build_prompts(
         '  "state_changes": {"中文狀態名": "中文的新值"},\n'
         '  "open_thread": "需要玩家回應的懸念,或 null",\n'
         '  "resolved_thread_ids": [已解決的既有事項 id],\n'
+        '  "delegation_outcomes": [{"id": 委託的 id, "status": "done" 或 "refused", '
+        '"outcome": "一句話說結果或拒絕的理由"}],\n'
         f'  "scene": "這段敘事主要發生在哪,只能從這幾個選一個:{"、".join(SCENES)}",\n'
         f'  "action": "這段時間主要在發生什麼,只能從這幾個選一個:{"、".join(ACTIONS)};'
         '沒有特別在發生什麼就填 null"\n'
@@ -228,14 +271,19 @@ def _build_prompts(
         if threads
         else "(沒有)"
     )
-    user_message = (
-        f"玩家離開了 {duration_text}。\n\n"
-        f"你目前的狀態:\n{state_text}\n\n"
-        f"還沒解決的事:\n{threads_text}\n\n"
-        f"你最近的記憶:\n{memory_text}\n\n"
-        "這段時間你身上發生了什麼?"
-    )
-    return system_prompt, user_message
+    sections = [
+        f"玩家離開了 {duration_text}。",
+        f"你目前的狀態:\n{state_text}",
+        f"還沒解決的事:\n{threads_text}",
+    ]
+    if delegations:
+        sections.append(
+            "玩家請你做、還沒有下場的事:\n"
+            + "\n".join(f"- [id={d['id']}] {d['request']}" for d in delegations)
+        )
+    sections.append(f"你最近的記憶:\n{memory_text}")
+    sections.append("這段時間你身上發生了什麼?")
+    return system_prompt, "\n\n".join(sections)
 
 
 def simulate_offline_period(
@@ -258,9 +306,10 @@ def simulate_offline_period(
     memory_text = "\n".join(f"- {event['content']}" for event in reversed(recent)) or "(還沒有記憶)"
     state = db.get_state(conn, agent_id)
     threads = db.get_open_threads(conn, agent_id)
+    delegations = db.get_pending_delegations(conn, agent_id)
 
     system_prompt, user_message = _build_prompts(
-        agent, _format_duration(elapsed), memory_text, state, threads
+        agent, _format_duration(elapsed), memory_text, state, threads, delegations
     )
 
     raw = llm.complete(system_prompt, user_message)
@@ -282,6 +331,24 @@ def simulate_offline_period(
     for thread_id in result.resolved_thread_ids:
         if thread_id in known_thread_ids:  # never let a hallucinated id touch the DB
             db.resolve_thread(conn, thread_id)
+
+    # Same guard as thread ids: an id the model invented must never touch the DB, or a
+    # hallucinated number would close an errand the player is still waiting on.
+    known_delegation_ids = {item["id"] for item in delegations}
+    for outcome in result.delegation_outcomes:
+        if outcome["id"] not in known_delegation_ids:
+            continue
+        db.resolve_delegation(conn, outcome["id"], outcome["status"], outcome["outcome"])
+        # 設計文件 第十二節: a refusal has to generate a thread. He said no because of
+        # something, and that something is what the player has to come back to.
+        if outcome["status"] == "refused":
+            db.add_open_thread(conn, agent_id, outcome["outcome"])
+        db.add_memory_event(
+            conn,
+            agent_id,
+            kind="offline_event",
+            content=outcome["outcome"],
+        )
 
     if result.open_thread:
         db.add_open_thread(conn, agent_id, result.open_thread)

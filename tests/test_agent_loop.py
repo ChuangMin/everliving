@@ -1,7 +1,7 @@
 import pytest
 
 from everliving import db, persona
-from everliving.agent_loop import build_system_prompt, respond
+from everliving.agent_loop import build_system_prompt, respond, split_scene_tag
 
 
 def test_build_system_prompt_includes_name_and_traits():
@@ -137,3 +137,51 @@ def test_a_conversation_beat_gets_an_anchor_too(conn, fake_llm):
 
     db.attach_asset(conn, turn.event_id, kind="video", ref="clips/bench.webm")
     assert [a["ref"] for a in db.get_assets(conn, turn.event_id)] == ["clips/bench.webm"]
+
+
+# --- delegation (設計文件 第十二節) -----------------------------------------
+
+
+def test_a_delegation_tag_is_peeled_off_and_recorded(conn, fake_llm):
+    """The tag is a stage direction like the others: it must never reach the player,
+    and it must never reach memory either, or the next turn feeds it back as something
+    he said out loud."""
+    fake_llm.reply = "行,我明天繞過去看看。\n場景:工作間\n委託:去回收場東邊找一個還能用的壓力閥"
+    agent_id = persona.seed_default_agent(conn)
+
+    turn = respond(conn, agent_id, fake_llm, "幫我看看回收場東邊還有沒有能用的壓力閥")
+
+    assert turn.reply == "行,我明天繞過去看看。"
+    assert turn.delegation == "去回收場東邊找一個還能用的壓力閥"
+    assert [d["request"] for d in db.get_pending_delegations(conn, agent_id)] == [
+        "去回收場東邊找一個還能用的壓力閥"
+    ]
+    assert "委託" not in db.get_recent_memory(conn, agent_id, limit=2)[0]["content"]
+
+
+def test_an_ordinary_turn_records_no_delegation(conn, fake_llm):
+    fake_llm.reply = "還行。\n場景:工作間"
+    agent_id = persona.seed_default_agent(conn)
+
+    turn = respond(conn, agent_id, fake_llm, "最近怎樣?")
+
+    assert turn.delegation is None
+    assert db.get_pending_delegations(conn, agent_id) == []
+
+
+def test_an_empty_delegation_tag_is_not_an_errand():
+    """A model told the line is optional writes it anyway. Recording that would leave
+    him owing the player something nobody asked for."""
+    for filler in ("無", "沒有", "null"):
+        _, _, _, delegation = split_scene_tag(f"嗯。\n委託:{filler}")
+        assert delegation is None
+
+
+def test_a_pending_delegation_is_in_the_next_conversation_prompt(conn, fake_llm):
+    """Without this he takes the same errand on twice and the player can't tell."""
+    agent_id = persona.seed_default_agent(conn)
+    db.add_delegation(conn, agent_id, "去回收場東邊找壓力閥")
+
+    respond(conn, agent_id, fake_llm, "在嗎?")
+
+    assert "去回收場東邊找壓力閥" in fake_llm.calls[0][1]

@@ -310,6 +310,11 @@
     <h3>還沒完的事</h3>
     <ul class="kv" id="benchThreads"></ul>
     <p class="empty" id="benchThreadsEmpty" hidden>沒有他在等你的事。</p>
+
+    <h3>你請他做的事</h3>
+    <ul class="kv" id="benchAsks"></ul>
+    <p class="empty" id="benchAsksEmpty" hidden>還沒請他做什麼。你不用指揮他走路,你只要開口——
+      結果是你不在的那段時間才會有的。</p>
   </div>
 </div>
 
@@ -889,7 +894,7 @@
     ['exchanges','你們說過的話'],
     ['resolved', '了結的事'],
   ];
-  let lastState = {}, lastThreads = [], lastLedger = {};
+  let lastState = {}, lastThreads = [], lastAsks = [], lastLedger = {};
 
   function bench(){
     const t = $('tally'); t.textContent='';
@@ -919,6 +924,18 @@
       const s=document.createElement('span'); s.textContent=d;
       li.appendChild(b); li.appendChild(s); th.appendChild(li);
     });
+
+    // The other direction: what you're waiting on him for. It only ever gets settled
+    // while you're away, so between asking and finding out this is the only place it
+    // exists — without it a delegation is indistinguishable from having been ignored.
+    const ak=$('benchAsks'); ak.textContent='';
+    $('benchAsksEmpty').hidden = (lastAsks||[]).length > 0;
+    (lastAsks||[]).forEach(d=>{
+      const li=document.createElement('li');
+      const b=document.createElement('b'); b.textContent='還沒有下場';
+      const s=document.createElement('span'); s.textContent=d;
+      li.appendChild(b); li.appendChild(s); ak.appendChild(li);
+    });
   }
   function setBench(open){
     $('bench').setAttribute('data-open', open ? '1' : '0');
@@ -942,6 +959,7 @@
   function apply(data){
     if(data.error){ fail(data.error); return false; }
     lastState = data.state || {}; lastThreads = data.threads || [];
+    if('delegations' in data) lastAsks = data.delegations || [];
     if(data.ledger) lastLedger = data.ledger;
     readout(data.state); threads(data.threads);
     if('action' in data) currentAction = data.action || null;

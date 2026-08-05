@@ -109,6 +109,7 @@ try {
     threads: ['等你回覆要不要幫他找零件'],
     ledger: {nights:3, events:7, exchanges:12, resolved:1},
     scene: '潮線',
+    delegations: ['去回收場東邊找一個還能用的壓力閥'],
     assets: [{kind:'video', ref:'clips/a.webm'}],
   });
   globalThis.__setBench(true);
@@ -119,10 +120,19 @@ try {
         && nodes.get('bench').getAttribute('data-open') === '1',
         'workbench fills in and opens');
 
-  globalThis.__apply({state:{}, threads:[], ledger:{nights:0,events:0,exchanges:0,resolved:0}});
+  // The other direction from threads: what you're waiting on him for. It's only ever
+  // settled while you're away, so between asking and finding out this is the one place
+  // a delegation is visible at all.
+  check(nodes.get('benchAsks').children.length === 1
+        && nodes.get('benchAsksEmpty').hidden === true,
+        'what you asked him to do shows up on the bench');
+
+  globalThis.__apply({state:{}, threads:[], delegations:[],
+                      ledger:{nights:0,events:0,exchanges:0,resolved:0}});
   globalThis.__bench();
   check(nodes.get('benchState').children.length === 0
-        && nodes.get('benchThreads').children.length === 0,
+        && nodes.get('benchThreads').children.length === 0
+        && nodes.get('benchAsks').children.length === 0,
         'workbench empties instead of showing stale rows');
 } catch (e) { check(false, `workbench threw: ${e.message}`); }
 

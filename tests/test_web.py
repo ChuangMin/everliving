@@ -205,6 +205,20 @@ def test_a_night_can_say_what_was_happening_not_only_where(session):
     assert payload["offline"]["action"] == "停電"
 
 
+def test_the_payload_carries_what_you_asked_him_to_do(session):
+    """A delegation is settled while the player is away, so between asking and finding
+    out the workbench is the only place it exists. It has to reach the page."""
+    conn = session._connect()
+    try:
+        db.add_delegation(conn, session.agent_id, "去回收場東邊找一個還能用的壓力閥")
+    finally:
+        conn.close()
+
+    payload = session.open()
+
+    assert payload["delegations"] == ["去回收場東邊找一個還能用的壓力閥"]
+
+
 def test_a_quiet_night_reports_no_action_rather_than_omitting_it(session):
     """Null is a real value here — it's how the picture is told to go back to nothing
     in particular. Omitting the key would leave the last action stuck on screen."""
