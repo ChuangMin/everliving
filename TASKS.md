@@ -86,6 +86,23 @@
       懸念寫進 `open_threads`、事件各存一筆記憶;下次對話會把狀態與懸念帶進 prompt,
       agent 會主動提起在等玩家的事。JSON 解析失敗時退化成純敘事(不會弄丟玩家要讀的東西)
 
+- [x] `done` **T0-16 H-1 流程排練(AI 代打)** — 2026-08-05 完成(claimed-by: Claude Opus 5)。
+      `python tools/h1_autoplay.py` 把 H-1 那四步用訪客 agent 跑完:每一步**新建一個 `web.Session`**
+      (跟網頁按鈕同一條路徑,不是複製一份;`Session.opened` 是 per run,共用會靜靜跳過離線模擬),
+      `offline_hours` 依序 `None / 24 / 0 / 24`,每步三輪 `auto_turn()`,最後印帳。
+      預設跑在另一個 DB(`everliving.db` 要不要清是人類的事),記錄寫 `h1_autoplay.log`。
+      全文留在 `playtests/2026-08-05-h1-autoplay.txt`。
+      **這不是 H-1 的答案**,H-1 問的是「你想不想再打開」——見「人類專屬」那一節。
+
+- [ ] `todo` **T0-17 懸念會疊,不會收** — T0-16 跑出來的:第 4 步的離線敘事把第 3 步答應的事接住了
+      (鐵台掃乾淨、硬幣罐推到你手邊),但它是**再開一條講同一件事的新懸念**,而不是把舊那條
+      標成 resolved。跑完 `open_threads` 有兩條幾乎一樣的,`resolved` 全程是 0。
+      機制本身是有的(`OfflineResult.resolved_thread_ids`,prompt 第 3 條也講了),
+      是模型沒用。三個層面同時中招:面板顯示兩條一樣的、每次對話 prompt 都變長(錢)、
+      而「解決了」這件事在資料上永遠不會發生。
+      **修法是 prompt 層**(既有懸念還沒解決時,新發展寫進 `events`,不要再開一條同義的),
+      所以動的是 `offline._build_prompts`,不是新機制。改之前先確認測試怎麼斷言 prompt 內容。
+
 ## 設計任務(只寫文件,不進 code)
 
 > 劇本層的**實作**閘門是 H-1(設計文件第十節),但**設計**不受那道閘門限制——
