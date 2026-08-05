@@ -1,0 +1,38 @@
+=== 修 prompt 之前(3 trials)===
+
+=== trial 1 ===
+  [refused] 手指腫得連工具都拿不穩, 更別提去扛死重的軸承。我不想把化膿的手伸進他們的警戒區受辱。
+  DB: status=refused
+  懸念:['手指腫得連工具都拿不穩, 更別提去扛死重的軸承。我不想把化膿的手伸進他們的警戒區受辱。']
+
+=== trial 2 ===
+  [refused] 虎口爛得握不住重物，加上機器廠上個月擅用零件的事我還沒忘。我不會拿自己手殘去跟他們硬碰，這趟我跑不了。
+  DB: status=refused
+  懸念:['我的右手現在連扳鉗都拿不起。你要軸承就自己過去跟廠方交涉，或者先帶抗生素來處理我的傷口。', '虎口爛得握不住重物，加上機器廠上個月擅用零件的事我還沒忘。我不會拿自己手殘去跟他們硬碰，這趟我跑不了。']
+
+=== trial 3 ===
+  [refused] 虎口化膿攣縮，根本咬不住鐵件。這趟門我絕不過去，手廢了誰來修你的維生系統？
+  DB: status=refused
+  懸念:['虎口化膿攣縮，根本咬不住鐵件。這趟門我絕不過去，手廢了誰來修你的維生系統？']
+
+=== 修 prompt 之後(trial 3 撞到 Groq 每日額度上限,只跑了 2 次)===
+Groq ✗ qwen/qwen3.6-27b after 0.1s — RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.6-27b` in organization `org_01kyz0x5xee1qtcmvqvzv33g4t` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 196326, Requested 4964. Please try again in 9m17.28s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+
+=== trial 1 ===
+  [refused] 右手傷勢拖垮了氣力，加上機器廠上次的封裝帳目不清讓我寒了心，我拒絕對方加派的搬運工差，那批軸承仍卡在他們的倉庫月台上等你親自點收。
+  DB: status=refused
+  懸念:['右手傷勢拖垮了氣力，加上機器廠上次的封裝帳目不清讓我寒了心，我拒絕對方加派的搬運工差，那批軸承仍卡在他們的倉庫月台上等你親自點收。']
+
+=== trial 2 ===
+  [refused] 手腫得握不住力，加上上個月才吃過他們的虧，這趟差事我接不動也不想去。
+  DB: status=refused
+  懸念:['手腫得握不住力，加上上個月才吃過他們的虧，這趟差事我接不動也不想去。']
+
+=== trial 3 ===
+Traceback (most recent call last):
+  File "D:\AIworld\src\everliving\llm.py", line 280, in complete
+    response = self._client.chat.completions.create(
+  File "C:\Users\i8252\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.10_qbz5n2kfra8p0\LocalCache\local-packages\Python310\site-packages\openai\_utils\_utils.py", line 286, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\i8252\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.10_qbz5n2kfra8p0\LocalCache\local-packages\Python310\site-packages\openai\resources\chat\completions\completions.py", line 1147, in create
+    return self._post(

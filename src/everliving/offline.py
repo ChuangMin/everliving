@@ -200,19 +200,29 @@ def _build_prompts(
     threads: list[dict],
     delegations: list[dict] | None = None,
 ) -> tuple[str, str]:
-    # Two different jobs, so two different rules. With nothing open, the thread is
-    # what gives the player a reason to come back. With something already open,
-    # asking for another one is what produced the failure this branch exists for:
-    # a rehearsal ran four steps, correctly picked up what the player had promised,
-    # and filed it as a *second* thread restating the first — so `resolved` stayed
-    # at 0, the panel showed the same待辦 twice, and every night made the
-    # conversation prompt longer. The default has to invert once something is open.
+    # Three jobs, so three rules, and the order between them matters. "Usually leave a
+    # thread behind" is the right default *only* when nothing else can produce one —
+    # it's what gives the player a reason to come back. Anything else that can produce
+    # a hook has to take precedence over it, or the two instructions disagree and the
+    # model obeys both:
+    #
+    # - an open thread already exists: asking for another produced a restatement of
+    #   the first, so `resolved` sat at 0 and the panel showed the same待辦 twice
+    # - a delegation is pending: a refusal already becomes a thread, and a live run
+    #   duly returned the refusal *and* an open_thread saying the same thing in
+    #   different words. Same defect, a door I opened myself one session later.
     if threads:
         thread_rule = (
             "2. **你已經有還沒解決的事了,而它的下一步就是這段時間最該發生的東西。**"
             "預設是把那件事**往前推**,不是再開一條:發展寫進 events 跟 narrative,"
             "open_thread 填 null。真的另外冒出一件不相干的事,才開新的一條。\n"
             "**同一件事換句話說寫成一條新的懸念,在玩家眼裡就是這件事永遠不會結束。**\n"
+        )
+    elif delegations:
+        thread_rule = (
+            "2. **這一輪的懸念會從委託的下場自己長出來**——尤其是你拒絕的時候,"
+            "拒絕的理由本身就是玩家要回來面對的事。所以 open_thread **預設填 null**,"
+            "真的另外冒出一件跟那件委託不相干的事,才寫進去。\n"
         )
     else:
         thread_rule = (

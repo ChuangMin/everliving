@@ -259,6 +259,23 @@ def test_an_unrecognised_status_still_settles_the_errand(conn):
     assert db.get_pending_delegations(conn, agent_id) == []
 
 
+def test_a_pending_delegation_also_suppresses_the_ask_for_a_new_thread(conn):
+    """The two rules disagreed and the model obeyed both. A live run refused an errand
+    — which becomes a thread by itself — and *also* returned an open_thread saying the
+    same thing in different words, because nothing was open yet so the "usually leave a
+    hook behind" default was still in force. Anything that can produce a hook has to
+    outrank that default."""
+    agent_id = persona.seed_default_agent(conn)
+    db.add_delegation(conn, agent_id, "去機器廠把那批軸承扛回來")
+    llm = FakeLLMClient(reply=_response(open_thread=None))
+
+    simulate_offline_period(conn, agent_id, llm, timedelta(days=1))
+
+    system_prompt, _ = llm.calls[0]
+    assert "通常要留下一件" not in system_prompt
+    assert "自己長出來" in system_prompt
+
+
 def test_offline_prompt_only_carries_the_refusal_rules_when_something_is_pending(conn):
     agent_id = persona.seed_default_agent(conn)
     llm = FakeLLMClient(reply=_response())
