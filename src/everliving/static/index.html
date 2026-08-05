@@ -61,7 +61,14 @@
      Every drifting layer carries a scale, because a layer that travels sideways
      inside a fixed viewBox will show you the edge of the world otherwise. Amplitude
      always stays well inside the overscan the scale buys. */
-  #camera,.drift{transform-box:view-box;transform-origin:500px 210px}
+  #camera,#aim,.drift{transform-box:view-box;transform-origin:500px 210px}
+  /* Where the camera is pointed. Separate from the push because it changes for a
+     different reason and on a different clock: the push is idle breathing that never
+     stops, this moves only when something happens and then holds there. Six seconds
+     and eased — a camera turning its attention, not a cut. The scale is what buys the
+     room to move at all; without it a lean of forty units would show the edge of the
+     world, since the sky and the haze are not inside a drifting layer. */
+  #aim{transform:scale(1.09);transition:transform 6s cubic-bezier(.4,0,.2,1)}
   /* Not a loop: `alternate` means it breathes in and out instead of snapping back
      to the start every cycle, which is the one thing that would read as a glitch. */
   #camera{animation:push 240s ease-in-out infinite alternate}
@@ -202,7 +209,10 @@
     .narrative p{font-size:16.5px}
   }
   @media (prefers-reduced-motion:reduce){
-    *{animation:none!important}
+    /* `transition` as well as `animation`: the camera's move toward an event is a
+       transition, and it is the largest movement on the page. Killing only animations
+       would have left the biggest one running. */
+    *{animation:none!important;transition:none!important}
   }
 </style>
 </head>
@@ -257,7 +267,7 @@
          vignette stay bolted to the frame because they are the frame, not the world.
          The drift wrappers exist so the drawing code can keep clearing #far/#mid/#near
          thirty seconds at a time without ever interrupting the motion. -->
-    <g id="camera">
+    <g id="camera"><g id="aim">
       <rect width="1000" height="420" fill="url(#skyGrad)"/>
       <circle id="sun" cx="770" cy="90" r="17" fill="#e8d7ae" opacity=".45"/>
       <circle id="sunHalo" cx="770" cy="90" r="52" fill="#e8d7ae" opacity=".07" filter="url(#soften)"/>
@@ -281,7 +291,7 @@
       </g>
 
       <g id="nearDrift" class="drift"><g id="near"></g></g>
-    </g>
+    </g></g>
     <g id="rain" opacity=".5"></g>
     <g id="action"></g>
     <rect id="grainRect" width="1000" height="420" filter="url(#grain)" opacity=".045"/>
@@ -363,9 +373,20 @@
     body: JSON.stringify(body || {})
   }).then(r => r.json());
 
+  /* `prefers-reduced-motion` is a CSS rule, and SMIL does not listen to CSS: every
+     <animate> in this file kept running regardless of the media query at the bottom of
+     the stylesheet, so the page has been claiming to respect that preference while
+     ignoring it. `begin="indefinite"` is SMIL's own way of saying "never, unless
+     something starts you", so the guard belongs here — one place that every moving
+     element already goes through, rather than a check at each of them. */
+  const motionOK = !(typeof matchMedia === 'function'
+                     && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
   function el(tag, attrs){
     const n = document.createElementNS(SVGNS, tag);
     for(const k in attrs) n.setAttribute(k, attrs[k]);
+    if(!motionOK && (tag === 'animate' || tag === 'animateTransform'))
+      n.setAttribute('begin', 'indefinite');   // after the loop: this must win
     return n;
   }
   /* Seeded, so a place looks the same every time you come back to it. A city that
@@ -755,9 +776,23 @@
      honest version of putting the camera where the event is, and the reason the drift
      above is worth having at all: a camera that never moves has nowhere to move to. */
   const FOCUS = {'焊接':[430,300], '停電':[820,120], '淹水':[500,296], '起霧':[500,210]};
+
+  //: How far the camera is willing to travel, in viewBox units. Bounded by the scale
+  //: on #aim (1.09 buys about 45 across and 19 down), and deliberately short of it:
+  //: this is a lean toward something, not a punch-in that re-crops the composition
+  //: SAFE was measured for.
+  const REACH = {x:40, y:14, pull:0.3};
+  const clamp = (v, lim) => Math.max(-lim, Math.min(lim, v));
+
   function aim(action){
     const f = FOCUS[action] || [500,210];
-    $('camera').style.transformOrigin = f[0]+'px '+f[1]+'px';
+    // Move the frame so the focus drifts toward the middle — part of the way, not all
+    // of it. Landing it dead centre would read as a cut, and would also mean every
+    // event looked like it happened in the same place.
+    const dx = clamp((500 - f[0]) * REACH.pull, REACH.x);
+    const dy = clamp((210 - f[1]) * REACH.pull, REACH.y);
+    $('aim').style.transform =
+      `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(1.09)`;
   }
 
   /* ---- draw ---- */

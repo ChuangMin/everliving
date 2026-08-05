@@ -95,13 +95,28 @@ check(s1.length > 0 && s1.join() === s2.join(),
       `water glints are stable across redraws (${s1.length} of them)`);
 
 // The camera leans toward whatever is happening. Without this the drift is decoration;
-// with it, it's the thing that can carry the player's eye to an event.
+// with it, it's the thing that can carry the player's eye to an event. It has to be a
+// transform on #aim rather than a moving transform-origin: an origin that jumps moves
+// every scaled pixel with it, instantly, which is a glitch and not a camera move.
 globalThis.__draw('工作間', '停電');
-const aimed = nodes.get('camera').style.transformOrigin;
+const aimed = nodes.get('aim').style.transform;
 globalThis.__draw('工作間', null);
-const idle = nodes.get('camera').style.transformOrigin;
-check(aimed === '820px 120px' && idle === '500px 210px',
-      `camera aims at the action (${aimed}) and returns to centre (${idle})`);
+const idle = nodes.get('aim').style.transform;
+check(/translate\(-40\.0px, 14\.0px\)/.test(aimed) && /translate\(0\.0px, 0\.0px\)/.test(idle),
+      `camera leans toward the action (${aimed}) and returns to centre (${idle})`);
+
+// The lean is bounded by what the scale on #aim can cover. Past that it would show the
+// edge of the world, because the sky and haze are not inside a drifting layer. Checked
+// across every action rather than one, since each has its own focal point.
+let worst = {x: 0, y: 0};
+for(const action of ['焊接','停電','淹水','起霧']){
+  globalThis.__draw('工作間', action);
+  const [tx, ty] = nodes.get('aim').style.transform
+    .match(/translate\((-?[\d.]+)px, (-?[\d.]+)px\)/).slice(1).map(Number);
+  worst = {x: Math.max(worst.x, Math.abs(tx)), y: Math.max(worst.y, Math.abs(ty))};
+}
+check(worst.x <= 45 && worst.y <= 19 && /scale\(1\.09\)/.test(aimed),
+      `the furthest lean (${worst.x}, ${worst.y}) stays inside the overscan the scale buys`);
 
 try {
   globalThis.__apply({

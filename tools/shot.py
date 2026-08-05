@@ -65,7 +65,12 @@ def pinned_page(source: str, offset: float) -> str:
         "<style>*,*::before,*::after{"
         f"animation-delay:-{offset}s!important;"
         "animation-play-state:paused!important;"
-        "animation-fill-mode:both!important}</style>"
+        "animation-fill-mode:both!important;"
+        # Transitions are not animations and `paused` does not touch them, so without
+        # this a still lands wherever a six-second camera move happened to be when the
+        # shutter opened. Killing them shows where things settle, which is the
+        # deterministic frame this tool exists to produce.
+        "transition:none!important}</style>"
     )
     # Last style in <head> wins on equal specificity, and !important beats the rest.
     return source.replace("</head>", override + "</head>", 1)
