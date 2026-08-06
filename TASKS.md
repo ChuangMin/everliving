@@ -247,6 +247,100 @@
       4. **聲音**:收件匣本來就有「語音輸入 / 配音輸出」,原本排在「之後」。
          化身決定會把它一起拉近
 
+## 開發 agent 循環(實作設計文件第十九節)
+
+> **這一組不動 `src/`,動的是「怎麼工作」。** 設計已由人類 2026-08-06 逐節確認,見設計文件第十九節。
+> 四個角色:**想 planner / 寫 builder / 查 auditor / 反思 reflector**,輪流跑,共用一份 `LOOP.md`。
+>
+> **順序不能顛倒**:先有檢查器(L1),契約才是真的;沒有 L1,L2/L3 寫的規則全靠自律。
+> **L4 是唯一的驗收**——前三個都只是文件,文件寫得再漂亮不代表 agent 讀了會照做。
+
+- [ ] `todo` **T2-L1 `LOOP.md` 骨架 + `tools/loop_check.py`** — 先寫檢查器,再寫被檢查的檔案。
+      **這是這組唯一有自動測試的任務**,因為它是唯一能被機器判對錯的部分。
+
+      **檔案**:新增 `tools/loop_check.py`、`tests/test_loop_check.py`、`LOOP.md`(repo 根目錄)
+
+      **API**(後面兩個任務不依賴它,但 L4 會用):
+      ```python
+      def check(text: str) -> list[str]:
+          """回傳違規訊息;空 list = 通過。"""
+      ```
+      CLI:`python tools/loop_check.py`(預設讀 `LOOP.md`),有違規就印出來並 `exit 1`。
+
+      **要檢查的八條規則**(每條一個測試,測試名稱照抄):
+      1. `test_missing_section_reported` — 八個區塊標題(退回重做/排隊中/進行中/待驗收/驗收結果/反思/skill 帳本/輪次記錄)缺一個就報
+      2. `test_sections_out_of_order_reported` — 八個標題順序錯了要報(交棒靠位置,順序亂了讀的人會找錯區)
+      3. `test_invalid_turn_owner_reported` — 表頭 `**現在輪到**:X`,X 必須是 想/寫/查/反思 之一
+      4. `test_in_progress_at_most_one` — 「進行中」的 `- ` 項目超過 1 則要報(builder 一次只做一則)
+      5. `test_queued_item_needs_tier_tag` — 「排隊中」每則要含 `[階N]`,N 在 1..7
+      6. `test_queued_item_needs_criteria` — 「排隊中」每則要含 `判準:`(沒有判準 auditor 無從驗收)
+      7. `test_tier_5_to_7_quota` — 階 5-7 的則數不得超過「排隊中」總則數的一半(補丁 2)
+      8. `test_verdict_needs_evidence` — 「驗收結果」每則要含反引號包住的東西(`檔案:行號` 或指令輸出)
+      9. `test_heartbeat_overdue_blocks_loop` — 「輪次記錄」自上次人類心跳起算滿 5 輪、而沒有新的心跳紀錄,
+         就報「心跳逾期,loop 應暫停」(**補丁 1**)。心跳紀錄的格式是輪次記錄裡一行含 `人類心跳:已開`。
+         **這條是這個檢查器最重要的一條**——其他八條管的是格式,只有這條管的是
+         「auditor 沒有外部錨、標準會軟化」(設計文件第十九節〈已知風險〉第 3 點)。
+         格式錯了頂多難讀,這條失效的話整個 loop 會很忙地跑很久然後沒人發現方向歪了
+
+      **代表性測試的形狀**(其餘七個照這個寫):
+      ```python
+      def test_tier_5_to_7_quota():
+          text = SKELETON.replace("## 排隊中\n", "## 排隊中\n"
+              "- [階5] A 判準:x\n- [階6] B 判準:x\n")
+          assert any("階 5-7" in m for m in check(text))
+      ```
+
+      **步驟**:寫八個測試 → `python -m pytest tests/test_loop_check.py -q` 確認**全紅** →
+      實作 `check()` → 再跑確認全綠 → 照第十九節〈`LOOP.md` 結構〉建 `LOOP.md`(八區 + 表頭,內容全空) →
+      `python tools/loop_check.py` 對空骨架要 **exit 0** → `python -m pytest -q` 全部通過 → commit
+
+      **完成判準**:`python -m pytest -q` 不減少通過數(現況 163),且 `python tools/loop_check.py` 對新建的空 `LOOP.md` 回 0
+
+      **注意**:規則 9 需要 `LOOP.md` 表頭有 `**距離人類心跳**:N 輪` 這一欄,建骨架時不要漏
+
+- [ ] `todo` **T2-L2 改寫 `AGENTS.md`** — 兩處,**定稿文字在設計文件第十九節〈連帶要改的 AGENTS.md〉,直接抄,不要自己重寫**。
+
+      1. **第 25 行那條規則**(「『今天沒有事該做』是一個正確的結果」)整段換成第十九節那個 blockquote 的內容。
+         規則的**目的沒變**(擋住為填滿 session 而發明的任務),換的是機制:七階取材梯 + 階 5-7 標記與配額
+      2. **〈兩種角色〉那節**改成四種,每個角色寫清楚:只准寫 `LOOP.md` 哪一區、只准碰哪些檔案、硬規則。
+         節名跟著改,並在節末指向 `LOOP.md` 與設計文件第十九節
+
+      **同時要改的還有兩處,不改會前後矛盾**:
+      - `TASKS.md` 本文件第 6 行「『沒有任務可做』是一個正常且正確的結果」——同一條規則的第二個副本
+      - `CLAUDE.md` 不用改(它只指向 `AGENTS.md`)
+
+      **完成判準**:`grep -rn "沒有事該做\|沒有任務可做" *.md` 只剩設計文件裡引述舊規則的地方(那是歷史紀錄,不改)
+
+- [ ] `todo` **T2-L3 四個 `.claude/agents/` 薄包裝** — `planner.md` / `builder.md` / `auditor.md` / `reflector.md`。
+
+      **薄的意思是真的薄**:每個檔案只寫 frontmatter(`name`、`description`、`tools`)加**三到五行本文**,
+      本文只做一件事——**叫它去讀 `AGENTS.md` 的角色定義和 `LOOP.md` 的當前狀態**。
+      角色契約的內容**一個字都不要複製過來**:複製了就會有兩份,兩份就會漂,而 Codex/Qwen 那邊只讀得到 `AGENTS.md` 那份。
+      這是設計文件第十九節〈不做什麼〉第二條寫死的。
+
+      **`tools` 欄位要照角色收緊**,這是檔案所有權從「約定」變成「機制」的地方:
+      - `planner`:讀取類 + Edit(只會動 `LOOP.md`)
+      - `builder`:全套(要寫 code、跑測試)
+      - `auditor`:讀取類 + Bash(要跑測試取證)+ Edit
+      - `reflector`:讀取類 + Edit + WebSearch/WebFetch(要上網找 skill)
+
+      **完成判準**:四個檔案都建好,且 `grep -c "只准寫" .claude/agents/*.md` 每個都是 0(證明沒有複製契約內容)
+
+- [ ] `todo` **T2-L4 空跑一輪** — **這是這組唯一真正的驗收**,前三個任務都只是文件。
+
+      文件寫得對不對,只有讓 agent 真的照著跑一輪才知道。跑法:
+
+      1. 用 `planner` 角色跑一次,看它排出來的東西**有沒有標階數、有沒有判準**,以及**有沒有偷偷替人類拍板**
+         (拿「等人類決定」那六題當任務就是失敗)
+      2. `python tools/loop_check.py` 要通過
+      3. 用 `builder` 挑一則做,做完看它**有沒有自己標 done**(標了就是失敗)
+      4. 用 `auditor` 驗收,看它**每則發現有沒有附證據**、有沒有順手改 code(改了就是失敗)
+
+      **失敗不算這個任務失敗**——失敗代表 L2/L3 的文字沒講清楚,回去改文字,再跑一次。
+      **把每一次的結果(含失敗的)寫進 `playtests/2026-XX-XX-loop-dryrun.txt`**,照 `AGENTS.md` 對真模型行為的既有要求。
+
+      **完成判準**:一輪四棒跑完,四個「失敗條件」一個都沒觸發,且過程寫進 `playtests/`
+
 ## 人類專屬(agent 不要認領,也不能代為判定通過)
 
 - [ ] **H-1 真人 playtest** — 這是里程碑 0 唯一的成敗判準。
