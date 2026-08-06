@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from everliving import db
 from everliving.llm import LLMClient, log_usage
 from everliving.offline import ACTIONS, SCENES
+from everliving.script_check import warn_if_simplified
 
 #: The stage direction at the end of a reply. Not dialogue — it never reaches the
 #: player, and it must never reach memory either, or the next turn feeds it back as
@@ -152,6 +153,7 @@ def respond(
     log_usage(conn, llm, agent_id, purpose="conversation")
 
     reply, scene, action, delegation = split_scene_tag(raw)
+    warn_if_simplified(reply, delegation or "")
 
     db.add_memory_event(conn, agent_id, kind="raw", content=f"玩家說:{player_message}")
     event_id = db.add_memory_event(conn, agent_id, kind="raw", content=f"我回答:{reply}")

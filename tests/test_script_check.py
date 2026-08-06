@@ -13,8 +13,11 @@ would train everyone to ignore the warning, which costs the whole check.
 
 import logging
 
-from everliving import offline
+from everliving import offline, persona
+from everliving.agent_loop import respond
 from everliving.script_check import find_simplified
+
+WARNED = "everliving.script_check"
 
 
 def test_finds_simplified_characters_in_order():
@@ -47,9 +50,32 @@ def test_empty_and_non_chinese_text():
     assert find_simplified("SELECT * FROM memory_events;") == []
 
 
+def test_conversation_reply_is_checked_too(conn, fake_llm, caplog):
+    # Wiring the check into offline parsing alone left the chat path open, and the very
+    # next real reply went through it: 「坐标是舊港區的沉標塔」 — 标 simplified and 標
+    # correct, in one sentence. Chat is the path players touch most; it cannot be the
+    # one that isn't watched.
+    fake_llm.reply = "訊號已傳回去,坐标是舊港區的沉標塔。"
+    agent_id = persona.seed_default_agent(conn)
+
+    with caplog.at_level(logging.WARNING, logger=WARNED):
+        turn = respond(conn, agent_id, fake_llm, "確認")
+
+    assert turn.reply == "訊號已傳回去,坐标是舊港區的沉標塔。"
+    assert any("标" in record.message for record in caplog.records)
+
+
+def test_conversation_stays_quiet_on_clean_reply(conn, fake_llm, caplog):
+    fake_llm.reply = "訊號已傳回去,坐標是舊港區的沉標塔。"
+    agent_id = persona.seed_default_agent(conn)
+    with caplog.at_level(logging.WARNING, logger=WARNED):
+        respond(conn, agent_id, fake_llm, "確認")
+    assert caplog.records == []
+
+
 def test_offline_parse_logs_a_warning_when_the_model_slips(caplog):
     raw = '{"narrative": "備援晶片跳出一個從没见过的訊號", "events": [], "state_changes": {}}'
-    with caplog.at_level(logging.WARNING, logger="everliving.offline"):
+    with caplog.at_level(logging.WARNING, logger=WARNED):
         result = offline.parse_offline_response(raw)
 
     # The narrative still reaches the player — regenerating costs another call, and on
@@ -63,7 +89,7 @@ def test_offline_parse_logs_a_warning_when_the_model_slips(caplog):
 
 def test_offline_parse_stays_quiet_on_clean_output(caplog):
     raw = '{"narrative": "我把主泵沉沙格掏空了", "events": [], "state_changes": {}}'
-    with caplog.at_level(logging.WARNING, logger="everliving.offline"):
+    with caplog.at_level(logging.WARNING, logger=WARNED):
         offline.parse_offline_response(raw)
     assert caplog.records == []
 

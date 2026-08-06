@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from everliving import db
 from everliving.llm import LLMClient, log_usage
-from everliving.script_check import find_simplified
+from everliving.script_check import warn_if_simplified
 
 _log = logging.getLogger(__name__)
 
@@ -199,25 +199,17 @@ def parse_offline_response(raw: str) -> OfflineResult:
 
 
 def _warn_about_simplified(result: OfflineResult) -> None:
-    """Say something when the model ignores the Traditional-Chinese rule.
+    """The state-change keys are read as carefully as the prose.
 
-    The prompt has demanded Traditional Chinese from the start; until now nothing
-    checked, so a local model's slip reached the player in silence. This only reports.
-    Regenerating would cost another call — five minutes on a local model — and
-    whether a slip is worth that is a product decision, not a parser's to make.
-
-    The state-change keys are read as carefully as the prose: the prompt calls them
-    out by name because the player sees them on screen.
+    The prompt calls those keys out by name because the player sees them on screen,
+    so a slip there is more visible than one buried mid-sentence, not less.
     """
-    text = " ".join(
-        [result.narrative, *result.events, *result.state_changes, *result.state_changes.values()]
+    warn_if_simplified(
+        result.narrative,
+        *result.events,
+        *result.state_changes,
+        *result.state_changes.values(),
     )
-    found = find_simplified(text)
-    if found:
-        _log.warning(
-            "模型回了簡體字(prompt 明文要求繁體):%s —— 敘事照樣交給玩家,沒有重生",
-            "".join(found),
-        )
 
 
 def _build_prompts(

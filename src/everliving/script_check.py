@@ -20,6 +20,10 @@ What to do about a slip is a product decision, and it belongs to the human.
 
 from __future__ import annotations
 
+import logging
+
+_log = logging.getLogger(__name__)
+
 #: Simplified forms with no legitimate Traditional reading. Grouped roughly by radical
 #: so gaps are easy to spot when someone adds to it.
 SIMPLIFIED_ONLY = frozenset(
@@ -53,3 +57,26 @@ def find_simplified(text: str) -> list[str]:
         if char in SIMPLIFIED_ONLY:
             seen.setdefault(char, None)
     return list(seen)
+
+
+def warn_if_simplified(*parts: str) -> list[str]:
+    """Log one line naming the offenders. Returns them, so a caller could act.
+
+    Every path that shows model text to the player calls this — the offline narrative
+    and the conversation reply both. Wiring only the first one was the original
+    mistake: the very next real reply slipped through the other
+    (「坐标是舊港區的沉標塔」 — one sentence, both scripts), and chat is the path a
+    player touches most.
+
+    Nothing here rewrites or rejects. Regenerating costs another call, which on a
+    local model is five minutes of a player staring at nothing, and silently
+    correcting the text would mean the agent's words are no longer the agent's — the
+    one thing this project cannot spend.
+    """
+    found = find_simplified(" ".join(part for part in parts if part))
+    if found:
+        _log.warning(
+            "模型回了簡體字(prompt 明文要求繁體):%s —— 文字照樣交給玩家,沒有重生也沒有改寫",
+            "".join(found),
+        )
+    return found
