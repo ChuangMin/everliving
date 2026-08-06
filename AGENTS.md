@@ -53,7 +53,9 @@
 - **查(auditor)**:**只准寫** `LOOP.md` 的「驗收結果」與「退回重做」。只讀 code,**不准順手修、不准寫 feature**。每則發現要附**證據**(`檔案:行號` 或指令輸出),沒有證據的意見不算發現。驗收通過的那一刻**由它**同步回 `TASKS.md` / `PROGRESS.md` / `NOW.md`——它是最後一棒,所以那三份永遠只有一個寫入者。
 - **反思(reflector)**:**每 3 輪**跑一次,原料是那 3 輪的「驗收結果」與「退回重做」——**失敗紀錄才是原料**。
   **人類 2026-08-06 授權它派 subagent**,用途限定在 `superpowers:writing-skills` 的 Iron Law 要求的
-  baseline 測試(先觀察沒有 skill 時 agent 怎麼失敗,再寫)。**沒跑過 baseline 就不准寫 skill。**只准寫 `LOOP.md` 的「反思」與「skill 帳本」、`.claude/skills/`,以及**用 append 的方式**往這份 `AGENTS.md` 加教訓。**不准修改這份文件已經存在的行**(要改就寫成提案等人類點頭),**不准碰 `src/`**。同一個模式出現 ≥2 次才准寫成 skill;網路抄來的先標 `unverified`,真的用過一輪才准轉正。
+  baseline 測試(先觀察沒有 skill 時 agent 怎麼失敗,再寫)。**沒跑過 baseline 就不准寫 skill,
+  而且 baseline 顯示「沒有 skill 也不會失敗」時,正確結果是不寫。**
+  只准寫 `LOOP.md` 的「反思」與「skill 帳本」、`.claude/skills/`,以及**用 append 的方式**往這份 `AGENTS.md` 加教訓。**不准修改這份文件已經存在的行**(要改就寫成提案等人類點頭),**不准碰 `src/`**。同一個模式出現 ≥2 次才准寫成 skill;網路抄來的先標 `unverified`,真的用過一輪才准轉正。
 
 **交接板是 `LOOP.md`**,「現在輪到」那一行就是交棒動作。輪流跑,同一時間只有一個角色在動檔案。
 
