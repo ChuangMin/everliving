@@ -267,14 +267,17 @@
       ```
       CLI:`python tools/loop_check.py`(預設讀 `LOOP.md`),有違規就印出來並 `exit 1`。
 
-      **要檢查的八條規則**(每條一個測試,測試名稱照抄):
+      **要檢查的十條規則**(每條一個測試,測試名稱照抄):
       1. `test_missing_section_reported` — 八個區塊標題(退回重做/排隊中/進行中/待驗收/驗收結果/反思/skill 帳本/輪次記錄)缺一個就報
       2. `test_sections_out_of_order_reported` — 八個標題順序錯了要報(交棒靠位置,順序亂了讀的人會找錯區)
       3. `test_invalid_turn_owner_reported` — 表頭 `**現在輪到**:X`,X 必須是 想/寫/查/反思 之一
       4. `test_in_progress_at_most_one` — 「進行中」的 `- ` 項目超過 1 則要報(builder 一次只做一則)
       5. `test_queued_item_needs_tier_tag` — 「排隊中」每則要含 `[階N]`,N 在 1..7
       6. `test_queued_item_needs_criteria` — 「排隊中」每則要含 `判準:`(沒有判準 auditor 無從驗收)
-      7. `test_tier_5_to_7_quota` — 階 5-7 的則數不得超過「排隊中」總則數的一半(補丁 2)
+      7. `test_tier_5_to_7_quota` — 階 5-7 的則數不得超過「排隊中」總則數的一半,**無條件捨去**
+         (排 2-3 則最多 1 則、排 4 則最多 2 則)(補丁 2)
+      10. `test_queue_depth_capped` — 「排隊中」超過 3 則要報。planner 一輪加好幾則、builder 一輪只做完一則,
+          **到達率大於服務率,不擋的話佇列每輪都在長**,而 `LOOP.md` 是每個 agent 醒來整份讀的東西
       8. `test_verdict_needs_evidence` — 「驗收結果」每則要含反引號包住的東西(`檔案:行號` 或指令輸出)
       9. `test_heartbeat_overdue_blocks_loop` — 「輪次記錄」自上次人類心跳起算滿 5 輪、而沒有新的心跳紀錄,
          就報「心跳逾期,loop 應暫停」(**補丁 1**)。心跳紀錄的格式是輪次記錄裡一行含 `人類心跳:已開`。
