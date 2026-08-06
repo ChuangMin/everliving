@@ -149,6 +149,45 @@ def test_a_reply_carries_its_own_anchor_and_assets(session):
     assert payload["assets"] == []   # nothing attached yet, and that must not error
 
 
+def test_the_scene_a_beat_was_drawn_in_never_reaches_the_player(session):
+    """Kept in the record, kept off the screen.
+
+    The scene each beat chose is stored on the beat so a mismatch can be looked into
+    later — but `story_assets` is also what the page renders beside a line, as
+    `kind · ref`. Sent unfiltered, every single turn grew two labels reading
+    `scene · 工作間` and `action · 焊接`, which is debug output standing where the
+    story goes. The scene already travels as its own field, so this was a duplicate
+    that could only do harm.
+    """
+    session.fake.reply = "我把閥門纏好了。\n場景:工作間\n動作:焊接"
+    payload = session.say("在嗎?")
+
+    assert payload["assets"] == []
+
+    conn = db.get_connection(session.db_path)
+    kinds = {a["kind"] for a in db.get_assets(conn, payload["event_id"])}
+    conn.close()
+    assert kinds == {"scene", "action"}, "still has to be recorded — only hidden"
+
+
+def test_the_offline_beat_hides_its_scene_the_same_way(session):
+    """Both paths render assets, so both paths had the leak."""
+    session.fake.reply = json.dumps(
+        {"narrative": "我整夜都在掏沉沙格。", "events": [], "state_changes": {},
+         "scene": "配電所", "action": "淹水"},
+        ensure_ascii=False,
+    )
+    _backdate(session, 24)
+    payload = session.open()
+
+    assert payload["offline"]["assets"] == []
+
+    conn = db.get_connection(session.db_path)
+    kinds = {a["kind"] for a in db.get_assets(conn, payload["offline"]["event_id"])}
+    conn.close()
+    assert kinds == {"scene", "action"}
+
+
 def test_a_visit_with_no_offline_period_opens_in_the_workshop(session):
     """The opening shot and the can't-draw-that fallback used to be the same constant,
     so a first visit landed on the city panorama by accident rather than by choice.

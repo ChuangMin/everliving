@@ -156,6 +156,11 @@ def attach_asset(
     return cur.lastrowid
 
 
+#: The kinds `attach_scene` writes. They hang off a beat exactly like a clip does, but
+#: they are a record of what happened rather than something to show the player.
+SCENE_KINDS = ("scene", "action")
+
+
 def attach_scene(
     conn: sqlite3.Connection,
     memory_event_id: int,
@@ -186,6 +191,25 @@ def get_assets(conn: sqlite3.Connection, memory_event_id: int) -> list[dict]:
         (memory_event_id,),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def get_media_assets(conn: sqlite3.Connection, memory_event_id: int) -> list[dict]:
+    """The assets meant to sit beside a beat — a clip, a still, a page.
+
+    Everything the display side sends comes through here rather than `get_assets`,
+    because the page renders each row as `kind · ref`: the scene rows went out
+    unfiltered once and put `scene · 工作間` next to every line the player read.
+    The scene already travels as its own field in the payload, so it was a duplicate
+    that could only do harm.
+
+    Use `get_assets` when you want the whole record, which is what the mismatch this
+    was all built for will need.
+    """
+    return [
+        asset
+        for asset in get_assets(conn, memory_event_id)
+        if asset["kind"] not in SCENE_KINDS
+    ]
 
 
 def get_recent_memory(conn: sqlite3.Connection, agent_id: int, limit: int = 20) -> list[dict]:

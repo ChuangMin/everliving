@@ -155,7 +155,7 @@ class Session:
                     "event_id": result.narrative_event_id,
                     "assets": [
                         {"kind": a["kind"], "ref": a["ref"]}
-                        for a in db.get_assets(conn, result.narrative_event_id)
+                        for a in db.get_media_assets(conn, result.narrative_event_id)
                     ],
                 }
             self.opened = True
@@ -188,7 +188,7 @@ class Session:
             payload["event_id"] = turn.event_id
             payload["assets"] = [
                 {"kind": a["kind"], "ref": a["ref"]}
-                for a in db.get_assets(conn, turn.event_id)
+                for a in db.get_media_assets(conn, turn.event_id)
             ]
             return payload
         finally:
@@ -226,7 +226,7 @@ class Session:
             payload["event_id"] = turn.event_id
             payload["assets"] = [
                 {"kind": a["kind"], "ref": a["ref"]}
-                for a in db.get_assets(conn, turn.event_id)
+                for a in db.get_media_assets(conn, turn.event_id)
             ]
             payload["auto"] = {
                 "used": self.auto_used,
