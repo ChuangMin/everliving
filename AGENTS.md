@@ -84,6 +84,8 @@
 
 如果重複性工作值得固化成一個可重用的流程(例如「開發-驗證-記錄」的固定步驟、跑測試的固定方式),可以自行在 `.claude/skills/` 底下建立專案級 Skill(例如 `development`、`testing`),不用每次都重新描述一遍。建了就照 repo 慣例 commit 進去,讓下一個 Claude Code session 也能用。
 
+上面〈四種角色〉在 `.claude/agents/` 底下有四個對應的檔案(`planner` / `builder` / `auditor` / `reflector`),Claude Code 可以直接叫。**那四個檔案是薄包裝,只負責把你指回這份文件**——角色契約的內容一個字都沒複製過去,因為複製了就會有兩份、兩份就會漂,而其他廠商的 agent 只讀得到這一份。**要改角色的規則,改這裡,不要改那四個檔案。**
+
 ## commit 慣例
 
 不要加任何特定廠商的具名貢獻標記(例如 `Co-Authored-By: <某家模型>`)——這個 repo 是多廠商協作,commit 記錄保持廠商中立。
