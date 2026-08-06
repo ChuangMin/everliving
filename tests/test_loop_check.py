@@ -9,7 +9,10 @@ be machine-checked are checked here, and the ones that can't are called out as s
 in the task list rather than pretended into a test.
 """
 
-from tools.loop_check import check
+import io
+import sys
+
+from tools.loop_check import check, main
 
 SKELETON = """# LOOP.md — 想 → 寫 → 查
 
@@ -115,6 +118,20 @@ def test_verdict_evidence_may_sit_on_a_continuation_line():
     # so evidence on the second line still counts as evidence.
     text = fill("驗收結果", "- 退回:離線敘事沒有落在狀態上\n      `src/everliving/offline.py:88`\n")
     assert check(text) == []
+
+
+def test_main_survives_a_console_that_cannot_encode_its_output(tmp_path, monkeypatch):
+    # The checker crashed the first time it had a violation to report: it printed `✗`,
+    # the console encoding couldn't hold that character, and the traceback exited 1 —
+    # the same code a clean run's failure would use, so nothing looked wrong from
+    # outside while every message it wanted to give was lost. Five rounds ran that
+    # way. An ascii stream is a harsher console than the real one, and enough to pin it.
+    board = tmp_path / "LOOP.md"
+    board.write_text(fill("進行中", "- 甲\n- 乙\n"), encoding="utf-8")
+    narrow = io.TextIOWrapper(io.BytesIO(), encoding="ascii", errors="strict")
+    monkeypatch.setattr(sys, "stdout", narrow)
+
+    assert main(["loop_check.py", str(board)]) == 1
 
 
 def test_heartbeat_overdue_blocks_loop():

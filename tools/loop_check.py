@@ -158,7 +158,23 @@ def check(text: str) -> list[str]:
     return problems
 
 
+def _survive_a_narrow_console() -> None:
+    """Let output degrade to '?' rather than kill the run.
+
+    This printed `✗` in front of every violation, which cp950 — the default console
+    encoding on the machine this runs on — cannot encode. So the checker crashed the
+    moment it had something to say, and only ever exited cleanly when the board was
+    clean. Four rounds passed before anyone noticed, because a traceback also exits
+    1: from the outside a broken checker and a working one looked identical.
+    """
+    try:
+        sys.stdout.reconfigure(errors="replace")
+    except (AttributeError, ValueError):  # not a reconfigurable stream
+        pass
+
+
 def main(argv: list[str]) -> int:
+    _survive_a_narrow_console()
     default = Path(__file__).resolve().parent.parent / "LOOP.md"
     path = Path(argv[1]) if len(argv) > 1 else default
     if not path.exists():
