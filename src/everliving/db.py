@@ -156,6 +156,30 @@ def attach_asset(
     return cur.lastrowid
 
 
+def attach_scene(
+    conn: sqlite3.Connection,
+    memory_event_id: int,
+    scene: str | None = None,
+    action: str | None = None,
+) -> None:
+    """Record where a beat was drawn and what was happening there.
+
+    Both axes were reaching the browser and then ceasing to exist, which left the one
+    reported mismatch — 「配電所/淹水」 over dialogue still set in the workshop —
+    impossible to look into, and any fix for it impossible to verify.
+
+    Two rows rather than one combined value, because the axes failed independently:
+    the place was often already right while the picture still didn't match the words.
+
+    `None` writes nothing. "Nothing in particular is happening" is a real state of the
+    picture, and a row saying so could not be told apart from one written by mistake.
+    """
+    if scene:
+        attach_asset(conn, memory_event_id, "scene", scene)
+    if action:
+        attach_asset(conn, memory_event_id, "action", action)
+
+
 def get_assets(conn: sqlite3.Connection, memory_event_id: int) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM story_assets WHERE memory_event_id = ? ORDER BY id",

@@ -157,6 +157,7 @@ def respond(
 
     db.add_memory_event(conn, agent_id, kind="raw", content=f"玩家說:{player_message}")
     event_id = db.add_memory_event(conn, agent_id, kind="raw", content=f"我回答:{reply}")
+    db.attach_scene(conn, event_id, scene, action)
     if delegation:
         db.add_delegation(conn, agent_id, delegation)
 

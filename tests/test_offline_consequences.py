@@ -114,9 +114,11 @@ def test_an_asset_can_be_hung_on_the_beat_the_simulation_just_wrote(conn):
 
     db.attach_asset(conn, result.narrative_event_id, kind="video", ref="clips/夜.webm")
 
-    assert [a["ref"] for a in db.get_assets(conn, result.narrative_event_id)] == [
-        "clips/夜.webm"
-    ]
+    # Filtered by kind rather than compared as a whole list: a real run now also hangs
+    # the scene it chose on this same beat, and asserting "the clip is the only thing
+    # here" was testing something this test never meant to claim.
+    videos = [a["ref"] for a in db.get_assets(conn, result.narrative_event_id) if a["kind"] == "video"]
+    assert videos == ["clips/夜.webm"]
 
 
 def test_existing_state_and_threads_are_fed_back_into_the_prompt(conn):

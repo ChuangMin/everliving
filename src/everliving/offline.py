@@ -352,6 +352,7 @@ def simulate_offline_period(
     result.narrative_event_id = db.add_memory_event(
         conn, agent_id, kind="offline_narrative", content=result.narrative
     )
+    db.attach_scene(conn, result.narrative_event_id, result.scene, result.action)
     for event in result.events:
         db.add_memory_event(conn, agent_id, kind="offline_event", content=event)
     for key, value in result.state_changes.items():
