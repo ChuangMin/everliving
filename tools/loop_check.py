@@ -50,7 +50,11 @@ QUEUE_DEPTH = 3
 
 _HEADING = re.compile(r"^##\s+(.*?)\s*$", re.M)
 _OWNER = re.compile(r"\*\*現在輪到\*\*[::]\s*([^\s((]+)")
+_PREVIOUS = re.compile(r"\*\*上一棒\*\*[::]\s*([^\s((@]+)")
 _TIER = re.compile(r"\[階([1-7])\]")
+
+#: The baton whose decision the tier quota is about.
+PLANNER = "想"
 
 
 def _entries(text: str) -> dict[str, list[str]]:
@@ -130,7 +134,22 @@ def check(text: str) -> list[str]:
             "這一棒該做的是重排跟砍,不是再加"
         )
 
-    if queued:
+    # Only right after the planner hands off. The cap is on what the planner *added*,
+    # and this used to be measured against whatever happened to be left in the queue —
+    # but the builder takes one item per round, so a queue that was legal when it was
+    # written turned illegal purely by being worked on. Rounds 6, 7, 10, 22, 26 and 28
+    # all sat on a red light that nobody's decision had caused.
+    #
+    # That is the difference between measuring someone's decision and measuring the
+    # residue of time passing (`AGENTS.md` 第四題). The planner's decision is only
+    # legible at the moment it hands off, so that is the only moment this is asked.
+    #
+    # A checker that cries wolf every other round trains everyone to ignore it, and a
+    # checker that gets ignored is the same thing as no checker at all.
+    previous = _PREVIOUS.search(text)
+    just_planned = previous is not None and previous.group(1) == PLANNER
+
+    if queued and just_planned:
         # Rounded down: with three queued items "no more than half" is one, not two.
         cap = math.floor(len(queued) / 2)
         invented = [t for t in tiers if t >= 5]

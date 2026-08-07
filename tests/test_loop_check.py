@@ -83,17 +83,50 @@ def test_queued_item_needs_criteria():
     assert any("判準" in m for m in check(text))
 
 
+def after(baton: str, section: str, body: str) -> str:
+    """A board where `baton` was the last role to act.
+
+    The quota rule is about what the planner *added*, so which baton just finished is
+    load-bearing for it — see `test_the_quota_does_not_fire_at_a_queue_the_builder_drained`.
+    """
+    return fill(section, body).replace("**上一棒**:—", f"**上一棒**:{baton}")
+
+
 def test_tier_5_to_7_quota():
-    text = fill(
-        "排隊中",
-        "- [階5] 甲 判準:x\n- [階6] 乙 判準:x\n- [階1] 丙 判準:x\n",
-    )
+    # Stated as 「想 just handed off」 because that is the only moment the rule is about:
+    # the planner put three in and two of them are its own invention.
+    text = after("想", "排隊中", "- [階5] 甲 判準:x\n- [階6] 乙 判準:x\n- [階1] 丙 判準:x\n")
     assert any("階 5-7" in m for m in check(text))
 
 
 def test_tier_5_to_7_quota_allows_half():
-    text = fill("排隊中", "- [階5] 甲 判準:x\n- [階1] 乙 判準:x\n")
+    text = after("想", "排隊中", "- [階5] 甲 判準:x\n- [階1] 乙 判準:x\n")
     assert check(text) == []
+
+
+def test_the_quota_does_not_fire_at_a_queue_the_builder_drained():
+    """The false alarm this rule has been raising for twenty rounds.
+
+    The cap is on what the planner adds. But it was measured against whatever happened
+    to be left in the queue — and the builder takes one item per round, so a queue that
+    was legal when it was written becomes illegal purely by being worked on. Rounds
+    6, 7, 10, 22, 26 and 28 all sat on a red light that no one's decision had caused.
+
+    A checker that cries wolf every other round teaches everyone to ignore it, and
+    `AGENTS.md` says so out loud: 紅燈太便宜就會被無視.
+    """
+    text = after("寫", "排隊中", "- [階6] 剩下的最後一則 判準:x\n")
+    assert check(text) == []
+
+
+def test_the_quota_still_fires_the_moment_the_planner_hands_off():
+    """The fix must not amount to deleting the rule.
+
+    Same single tier-6 item, but with the planner as the last baton — now it *is*
+    someone's decision, and one invented item out of one is over the cap.
+    """
+    text = after("想", "排隊中", "- [階6] 我自己想出來的 判準:x\n")
+    assert any("階 5-7" in m for m in check(text))
 
 
 def test_queue_depth_capped():
