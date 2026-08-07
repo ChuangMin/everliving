@@ -119,6 +119,27 @@ def test_the_quota_does_not_fire_at_a_queue_the_builder_drained():
     assert check(text) == []
 
 
+def test_a_missing_last_baton_is_caught_rather_than_quietly_excusing_the_quota():
+    """The cost of making the quota conditional, paid for out in the open.
+
+    Tying it to 「上一棒是想」 means a board that forgets to say who just acted escapes
+    the check entirely — the old rule failed loud and wrong, and this one could fail
+    quiet and wrong, which is worse. So the field itself is validated: garbage or
+    missing is a violation on its own, and the silence becomes unreachable by accident.
+
+    It does not stop a planner that deliberately writes the wrong baton. Nothing here
+    can — the whole board is self-reported — but that is a lie in the record, not a
+    gap in the checker.
+    """
+    text = fill("排隊中", "- [階6] 甲 判準:x\n").replace("**上一棒**:—", "**上一棒**:")
+    assert any("上一棒" in m for m in check(text))
+
+
+def test_the_opening_dash_is_still_a_legal_last_baton():
+    """Round one has no previous baton and must not read as a broken board."""
+    assert check(SKELETON) == []
+
+
 def test_the_quota_still_fires_the_moment_the_planner_hands_off():
     """The fix must not amount to deleting the rule.
 

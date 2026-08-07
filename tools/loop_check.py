@@ -146,8 +146,19 @@ def check(text: str) -> list[str]:
     #
     # A checker that cries wolf every other round trains everyone to ignore it, and a
     # checker that gets ignored is the same thing as no checker at all.
+    # Validated, because making the quota conditional on this field means a board that
+    # forgets to fill it in would escape the check in silence. The old rule failed loud
+    # and wrong; a rule that fails quiet and wrong is worse. `—` is round one, which
+    # legitimately has no previous baton.
     previous = _PREVIOUS.search(text)
-    just_planned = previous is not None and previous.group(1) == PLANNER
+    said = previous.group(1) if previous else "(沒寫)"
+    if said not in OWNERS and said != "—":
+        problems.append(
+            "「上一棒」必須是 " + "/".join(OWNERS) + f" 或 —,不是「{said}」"
+            "(配額規則靠它判斷 planner 剛交棒沒有)"
+        )
+
+    just_planned = said == PLANNER
 
     if queued and just_planned:
         # Rounded down: with three queued items "no more than half" is one, not two.
