@@ -61,7 +61,7 @@ def next_message(
 
     raw = llm.complete(system_prompt, user_message)
     # Recorded separately from a real player's turn: same fiction, different books.
-    log_usage(conn, llm, agent_id, purpose="auto_visitor")
+    log_usage(conn, llm, agent_id, purpose="auto_visitor", reply=raw)
 
     line = raw.strip().splitlines()[0] if raw.strip() else ""
     return line.strip(_QUOTES).strip()

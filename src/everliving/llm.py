@@ -205,13 +205,23 @@ def _log_call_failed(label: str, model: str, started: float, exc: Exception) -> 
 
 
 def log_usage(
-    conn: sqlite3.Connection, llm: LLMClient, agent_id: int | None, purpose: str
+    conn: sqlite3.Connection,
+    llm: LLMClient,
+    agent_id: int | None,
+    purpose: str,
+    reply: str | None = None,
 ) -> None:
-    """Persist the token usage of the most recent call, if the client reported any."""
+    """Persist the token usage of the most recent call, and what it said.
+
+    `reply` is optional only because not every caller has it to hand; when it is passed
+    it is stored raw, before `split_scene_tag` or anything else takes a piece off. Until
+    2026-08-07 nothing kept it at all, and a day spent failing to answer 「模型到底吐了
+    什麼」 is what that cost (第 7 輪 auditor found the gap; `db.llm_replies` closes it).
+    """
     usage = getattr(llm, "last_usage", None)
     if not usage:
         return
-    db.record_llm_call(
+    call_id = db.record_llm_call(
         conn,
         agent_id=agent_id,
         purpose=purpose,
@@ -219,6 +229,8 @@ def log_usage(
         input_tokens=usage["input_tokens"],
         output_tokens=usage["output_tokens"],
     )
+    if reply is not None:
+        db.record_llm_reply(conn, call_id, reply)
 
 
 class AnthropicLLMClient:

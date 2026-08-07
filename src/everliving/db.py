@@ -119,6 +119,25 @@ CREATE TABLE IF NOT EXISTS visits (
     agent_id INTEGER NOT NULL REFERENCES agents(id),
     visited_at TEXT NOT NULL
 );
+
+-- What the model actually sent back, before anything was taken off it.
+--
+-- 第 7 輪 auditor found that this project records the player's half of every exchange
+-- and none of 陌洲's: the prompts reach the log at DEBUG, the reply reaches nothing, and
+-- `memory_events` keeps the narrative only after `split_scene_tag` has removed the stage
+-- directions. It stayed open until 2026-08-07, when three 6-minute runs came back blank
+-- and 「模型到底吐了什麼」 could not be answered — `llm_calls` had 3423 output tokens and
+-- not one of them to look at.
+--
+-- Its own table rather than a column on `llm_calls`, so existing databases pick it up
+-- from `CREATE TABLE IF NOT EXISTS` with no migration. One row per call, and a call with
+-- no row is 「還沒記」 — distinct from a row holding "", which is 「記了,是空的」. Those are
+-- different facts and the blank nights are exactly the second kind.
+CREATE TABLE IF NOT EXISTS llm_replies (
+    llm_call_id INTEGER PRIMARY KEY REFERENCES llm_calls(id),
+    reply TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -379,14 +398,44 @@ def record_llm_call(
     model: str,
     input_tokens: int,
     output_tokens: int,
-) -> None:
-    """Log token usage so we can answer '每個玩家每天燒多少 API 錢' with real data."""
-    conn.execute(
+) -> int:
+    """Log token usage so we can answer '每個玩家每天燒多少 API 錢' with real data.
+
+    Returns the row id so the reply can be hung off it (`record_llm_reply`).
+    """
+    cur = conn.execute(
         "INSERT INTO llm_calls (agent_id, purpose, model, input_tokens, output_tokens, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?)",
         (agent_id, purpose, model, input_tokens, output_tokens, _now()),
     )
     conn.commit()
+    return cur.lastrowid
+
+
+def record_llm_reply(conn: sqlite3.Connection, llm_call_id: int, reply: str) -> None:
+    """Keep what came back, raw — including when what came back was nothing.
+
+    Empties are the rows worth having. Skipping them would drop precisely the calls
+    anyone would want to investigate, which is the hole that made 2026-08-07 take three
+    runs to diagnose.
+    """
+    conn.execute(
+        "INSERT OR REPLACE INTO llm_replies (llm_call_id, reply, created_at) VALUES (?, ?, ?)",
+        (llm_call_id, reply, _now()),
+    )
+    conn.commit()
+
+
+def get_llm_reply(conn: sqlite3.Connection, llm_call_id: int) -> str | None:
+    """The raw reply, or None if none was ever recorded.
+
+    `None` and `""` mean different things here — 「還沒記」 versus 「記了,是空的」 — and the
+    blank nights are the second kind.
+    """
+    row = conn.execute(
+        "SELECT reply FROM llm_replies WHERE llm_call_id = ?", (llm_call_id,)
+    ).fetchone()
+    return row["reply"] if row else None
 
 
 def token_usage_by_day(conn: sqlite3.Connection) -> list[dict]:

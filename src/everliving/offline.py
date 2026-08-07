@@ -385,7 +385,9 @@ def _ask_until_there_is_a_night(
     """
     for attempt in range(2):
         raw = llm.complete(system_prompt, user_message)
-        log_usage(conn, llm, agent_id, purpose="offline_narrative")
+        # The raw reply goes down with the usage row, so a night that came back empty
+        # leaves something to look at rather than only a token count.
+        log_usage(conn, llm, agent_id, purpose="offline_narrative", reply=raw)
         result = parse_offline_response(raw)
         if result.narrative.strip():
             return result

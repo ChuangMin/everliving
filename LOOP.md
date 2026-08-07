@@ -248,6 +248,31 @@
 
 <!-- builder 交棒。寫清楚動了哪些檔案、怎麼驗 -->
 
+- **[階6] 陌洲說過的話終於被記下來了 —— 第 7 輪抓到的洞,今天才付出代價。** **252 passed(原 247,+5)。**
+      **動過的檔案**:`src/everliving/db.py`(新增 `llm_replies` 表、`record_llm_reply`、
+      `get_llm_reply`;`record_llm_call` 改成回傳 id)、`llm.py`(`log_usage` 多收一個 `reply`)、
+      `offline.py` / `agent_loop.py` / `visitor.py` 各接一行、`tests/test_reply_recording.py`(新增 5 個)。
+
+      **為什麼是現在做**:第 7 輪 auditor 就抓到「這個系統記玩家說了什麼,不記陌洲說的原始形式」,
+      **而它擋住的東西今天終於現形**——三次 6 分鐘的執行回來都是空的,
+      而「模型到底吐了什麼」**答不出來**:`llm_calls` 有 3423 個 output token,**一個都看不到**。
+      整個診斷是從 token 數反推的。**這正是 `AGENTS.md`〈第六題〉,套在一個早就被抓到卻沒補的洞上。**
+
+      **三個決定**:
+      1. **獨立一張表,不是 `llm_calls` 加欄位** —— `CREATE TABLE IF NOT EXISTS` 讓既有 DB
+         零 migration 就長出來(`ALTER TABLE` 做不到這件事)
+      2. **空字串照記** —— **空的那幾筆正是唯一值得調查的**。跳過空的等於專門丟掉出事的證據
+      3. **`None` 跟 `""` 是兩件事** —— 「還沒記」跟「記了,是空的」。
+         這條線第 10 輪拒絕替 `None` 場景寫一列時就劃過了
+
+      **最重要的接線是 `agent_loop.py:153`**:它下一行就是 `split_scene_tag(raw)`——
+      **那個剝除正是第 7 輪說的、讓原始形式再也找不回來的地方**。現在剝之前先存。
+      有測試走真實路徑釘住:玩家看到的 `reply` **不含**「場景:」,而記下來的 raw **含**。
+
+      ⚠️ **一個我沒有順手修、但要講明的耦合**:reply 是掛在 usage 那一列上的,
+      **所以一個不回報 usage 的 client 也不會留下 reply**。
+      四個現有 provider 都會回報,但這個耦合是真的,已寫進測試註解。
+
 - **[階6] 配額規則現在量的是決定,不是時間流逝 —— 假警報沒了。** **245 passed(原 243,+2)。**
       **動過的檔案**:`tools/loop_check.py`、`tests/test_loop_check.py`。
       **先看到紅**:新測試重現了假警報(`Left contains one more item: '階 5-7 有 1 則…'`)。

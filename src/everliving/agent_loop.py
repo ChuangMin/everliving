@@ -150,7 +150,10 @@ def respond(
     user_message = "\n\n".join(sections)
 
     raw = llm.complete(system_prompt, user_message)
-    log_usage(conn, llm, agent_id, purpose="conversation")
+    # Before `split_scene_tag` below takes the stage directions off it. That stripping is
+    # right for the story and is exactly why 陌洲's original wording was unrecoverable
+    # until now (第 7 輪 auditor).
+    log_usage(conn, llm, agent_id, purpose="conversation", reply=raw)
 
     reply, scene, action, delegation = split_scene_tag(raw)
     warn_if_simplified(reply, delegation or "")
