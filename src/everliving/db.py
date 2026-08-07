@@ -90,6 +90,22 @@ CREATE TABLE IF NOT EXISTS story_assets (
     ref TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+-- When this world began. One row, and the only thing the world clock needs to store:
+-- pollution is a function of how long the world has existed (`world.py`), so there is
+-- nothing to tick and nothing that can drift while the process is dead.
+--
+-- Deliberately not in `agent_state`. That table is written straight from the model's
+-- `state_changes`, and a background pressure that only rises must not share a writer
+-- with something that can say anything at all — one 「汙染:好轉」 and the accumulation
+-- the whole thing exists for is gone.
+--
+-- No `agent_id`: the world is above the agent. 里程碑 1 puts several agents in it and
+-- they have to be standing in the same weather, or there is nothing to have in common.
+CREATE TABLE IF NOT EXISTS world (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    started_at TEXT NOT NULL
+);
 """
 
 

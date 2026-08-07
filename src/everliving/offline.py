@@ -13,7 +13,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from everliving import db
+from everliving import db, world
 from everliving.llm import LLMClient, log_usage
 from everliving.script_check import warn_if_simplified
 
@@ -219,6 +219,7 @@ def _build_prompts(
     state: dict[str, str],
     threads: list[dict],
     delegations: list[dict] | None = None,
+    pressure: world.Pressure | None = None,
 ) -> tuple[str, str]:
     # Three jobs, so three rules, and the order between them matters. "Usually leave a
     # thread behind" is the right default *only* when nothing else can produce one —
@@ -306,6 +307,11 @@ def _build_prompts(
         f"你目前的狀態:\n{state_text}",
         f"還沒解決的事:\n{threads_text}",
     ]
+    # Below his own state and his own unfinished business, not above them. Those are
+    # what he answers with; the world is the room they happen in, and leading with the
+    # room turns the reply into a weather report that happens to contain a man.
+    if pressure is not None:
+        sections.append(world.describe_for_prompt(pressure))
     if delegations:
         sections.append(
             "玩家請你做、還沒有下場的事:\n"
@@ -339,7 +345,15 @@ def simulate_offline_period(
     delegations = db.get_pending_delegations(conn, agent_id)
 
     system_prompt, user_message = _build_prompts(
-        agent, _format_duration(elapsed), memory_text, state, threads, delegations
+        agent,
+        _format_duration(elapsed),
+        memory_text,
+        state,
+        threads,
+        delegations,
+        # The world has been getting worse the whole time he was alone in it, which is
+        # the difference between coming back and never having left.
+        pressure=world.pressure(conn),
     )
 
     raw = llm.complete(system_prompt, user_message)
