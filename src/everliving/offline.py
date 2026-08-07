@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from everliving import db, world
-from everliving.llm import LLMClient, log_usage
+from everliving.llm import LLMClient, LLMRefusal, log_usage
 from everliving.script_check import warn_if_simplified
 
 _log = logging.getLogger(__name__)
@@ -322,6 +322,44 @@ def _build_prompts(
     return system_prompt, "\n\n".join(sections)
 
 
+def _ask_until_there_is_a_night(
+    conn: sqlite3.Connection,
+    agent_id: int,
+    llm: LLMClient,
+    system_prompt: str,
+    user_message: str,
+) -> OfflineResult:
+    """Ask again if the answer was empty, and refuse rather than store a blank night.
+
+    Measured 2026-08-07: of four real Ollama calls, one came back truncated mid-JSON
+    and one came back completely empty (`playtests/2026-08-07-world-clock.txt`). The
+    empty one is the shape that hurts. `parse_offline_response` degrades malformed
+    output to plain prose so the narrative survives — but an empty answer has no prose
+    to keep, and the blank was going straight into `memory_events`, which is
+    append-only. A blank night could never be taken back, and it would be read into
+    every later prompt as an evening he spent saying nothing.
+
+    One retry, not a loop: both failures came from a model that answered the very same
+    prompt correctly minutes earlier, so this is a coin landing badly rather than a
+    prompt that cannot be answered. Retrying forever would turn a bad night into an
+    unbounded bill on the provider that is slowest to begin with.
+
+    Raising is the deliberate ending. `web.py:312` already catches `LLMRefusal` and
+    shows it to the player, so a night that could not be written arrives as a sentence
+    saying so — not as an empty panel, which is what the human reported last time as
+    「代打沒甚麼反應」.
+    """
+    for attempt in range(2):
+        raw = llm.complete(system_prompt, user_message)
+        log_usage(conn, llm, agent_id, purpose="offline_narrative")
+        result = parse_offline_response(raw)
+        if result.narrative.strip():
+            return result
+        _log.warning("離線敘事第 %d 次回來是空的%s", attempt + 1, ",再問一次" if not attempt else "")
+
+    raise LLMRefusal("模型連續兩次沒有寫出這段時間發生的事,這一夜沒有被記下來。")
+
+
 def simulate_offline_period(
     conn: sqlite3.Connection,
     agent_id: int,
@@ -356,9 +394,7 @@ def simulate_offline_period(
         pressure=world.pressure(conn),
     )
 
-    raw = llm.complete(system_prompt, user_message)
-    log_usage(conn, llm, agent_id, purpose="offline_narrative")
-    result = parse_offline_response(raw)
+    result = _ask_until_there_is_a_night(conn, agent_id, llm, system_prompt, user_message)
 
     # Keep the id: this row is what story assets hang on, and it can only be captured
     # here — reconstructing "which beat was that" from the text afterwards is exactly

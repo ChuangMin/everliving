@@ -64,29 +64,49 @@ def test_the_clock_is_derived_from_the_calendar_rather_than_ticked(started):
     assert once == again, "reading it must not be what moves it"
 
 
-def test_the_world_remembers_when_it_started(started, tmp_path):
-    """Restarting the process must not restart the world."""
-    reopened = db.get_connection(":memory:")
+def test_the_world_remembers_when_it_started(tmp_path):
+    """Restarting the process must not restart the world.
+
+    On a real file, closed and reopened, and the epoch is deliberately *not* handed
+    back in on the second connection — the reading has to come out of storage. An
+    earlier version of this test opened a second `:memory:` database and passed the
+    same epoch to both, which is 「同一個常數等於它自己」 and stayed green even with
+    stored-epoch reads removed entirely.
+    """
+    path = str(tmp_path / "world.db")
+    writing = db.get_connection(path)
+    db.init_schema(writing)
+    world.start_world(writing, at=EPOCH)
+    writing.close()
+
+    reopened = db.get_connection(path)
     try:
-        # Same epoch written into a second database: the reading has to come from
-        # storage, not from a module-level default that happens to agree.
         db.init_schema(reopened)
-        world.start_world(reopened, at=EPOCH)
-        assert world.pollution(reopened, now=_at(10)) == world.pollution(started, now=_at(10))
+        assert world.pollution(reopened, now=_at(10)) == 10
     finally:
         reopened.close()
 
 
-def test_starting_a_world_twice_does_not_move_its_epoch(started):
+def test_starting_a_world_twice_does_not_move_its_epoch(tmp_path):
     """Opening the app is not the same as creating the world.
 
     `start_world` runs on every open, so if the second call reset the epoch the clock
     would sit at zero forever — which looks exactly like a clock that works, until
     someone checks whether it ever left the first stage.
+
+    The second call passes a *different* epoch on purpose: handing back the original
+    would let a reset pass unnoticed.
     """
-    before = world.pollution(started, now=_at(30))
-    world.start_world(started, at=_at(29))
-    assert world.pollution(started, now=_at(30)) == before
+    path = str(tmp_path / "world.db")
+    conn = db.get_connection(path)
+    try:
+        db.init_schema(conn)
+        world.start_world(conn, at=EPOCH)
+        world.start_world(conn, at=_at(29))
+
+        assert world.pollution(conn, now=_at(30)) == 30
+    finally:
+        conn.close()
 
 
 def test_an_existing_save_does_not_get_a_brand_new_world(conn):
