@@ -16,7 +16,17 @@ from everliving import db, logs
 
 _log = logs.get_logger("llm")
 
-PROVIDERS = ("anthropic", "grok", "groq", "ollama")
+PROVIDERS = ("auto", "anthropic", "grok", "groq", "ollama")
+
+#: ⚠️ **還沒改成 `auto`,而且那是刻意的。**
+#:
+#: 人類 2026-08-07 答的是「AUTO ROUTER」,`--provider auto` 已經可以用(見 `router.py`)。
+#: 但把**預設**換成 `auto` 是另一件事,而且試過一次就踩到地雷:
+#: `tests/test_provider_selection.py:76` 會設一把假的 `XAI_API_KEY`,於是 router 真的把
+#: Grok client 建了起來、**發出真實網路呼叫**,整套測試當場卡死。
+#:
+#: 那個地雷本身比這個預設值重要:**這套測試在 provider 建得起來的時候,是會打真的 API 的。**
+#: 換預設值要連同那件事一起處理,不能順手改一行。已排進 `LOOP.md`。
 DEFAULT_PROVIDER = "anthropic"
 
 # Cheap default so casual dev/playtest sessions don't rack up cost. Override with
@@ -339,10 +349,24 @@ class OllamaLLMClient(OpenAICompatibleClient):
 
 
 def make_client(provider: str | None = None, model: str | None = None) -> LLMClient:
-    """Build the selected provider's client. Selection is explicit, never inferred."""
+    """Build the selected provider's client.
+
+    Naming one is still explicit and still wins. `auto` is the one that chooses, and it
+    chooses per call rather than once at startup — see `router.py`.
+    """
     provider = (
         provider or os.environ.get("EVERLIVING_PROVIDER") or DEFAULT_PROVIDER
     ).lower()
+    if provider == "auto":
+        # Imported here rather than at module scope: router imports this module back.
+        from everliving.router import DEFAULT_ORDER, RoutingLLMClient
+
+        return RoutingLLMClient(
+            [
+                (name, lambda n=name: make_client(n, model=model))
+                for name in DEFAULT_ORDER
+            ]
+        )
     if provider == "anthropic":
         return AnthropicLLMClient(model=model)
     if provider == "grok":
