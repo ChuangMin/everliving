@@ -1,7 +1,14 @@
-"""Missing credentials must fail with guidance, not a traceback.
+﻿"""Missing credentials must fail with guidance, not a traceback.
 
 This path only fires on the first API call — the SDK resolves credentials lazily, so
 a missing key looks fine right up until the model is actually needed.
+
+**Every test here now names its provider.** They used to rely on the default being
+`anthropic`, and once the default became `auto` (2026-08-07, after 人類 said 「範圍圍籬拆」)
+that reliance changed what they meant: under the router a dead provider is *supposed* to
+be routed past rather than exited on, so they were failing for the right reason. Naming
+the provider keeps the thing they were actually protecting — ask for a provider you have
+no key for, and you get a sentence you can act on instead of a stack trace.
 """
 
 import pytest
@@ -41,7 +48,7 @@ def test_missing_credentials_in_conversation_exits_with_guidance(
     monkeypatch.setattr("builtins.input", _scripted_input(["你好", "exit"]))
 
     with pytest.raises(SystemExit) as excinfo:
-        cli.main([])
+        cli.main(["--provider", "anthropic"])
 
     assert excinfo.value.code == 1
     out = capsys.readouterr().out
@@ -63,7 +70,7 @@ def test_low_credit_exits_with_the_server_message(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr("builtins.input", _scripted_input(["你好", "exit"]))
 
     with pytest.raises(SystemExit) as excinfo:
-        cli.main([])
+        cli.main(["--provider", "anthropic"])
 
     assert excinfo.value.code == 1
     out = capsys.readouterr().out
@@ -79,7 +86,7 @@ def test_missing_credentials_in_offline_narrative_exits_with_guidance(
     monkeypatch.setattr("builtins.input", _scripted_input(["exit"]))
 
     with pytest.raises(SystemExit) as excinfo:
-        cli.main(["--offline-hours", "24"])
+        cli.main(["--provider", "anthropic", "--offline-hours", "24"])
 
     assert excinfo.value.code == 1
     assert "找不到可用的 API 憑證" in capsys.readouterr().out

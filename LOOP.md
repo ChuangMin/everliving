@@ -24,7 +24,7 @@
 > 歷史往 `PROGRESS.md` 走,不留在這裡。
 
 **現在輪到**:查(auditor)   **上一棒**:寫 @2026-08-07
-**本輪次**:24   **距離下次反思**:0 輪(**逾期,下一棒該是反思**)   **距離人類心跳**:⚠️ 逾期中,**人類 2026-08-07 明示照跑**
+**本輪次**:26   **距離下次反思**:0 輪(**已逾期兩輪,下一棒就是反思**)   **距離人類心跳**:⚠️ 逾期中,**人類 2026-08-07 明示照跑**
 
 > **「暫停」沒有自己的欄位,這是刻意的。** 一開始這裡寫「⏸ 暫停中」,`loop_check` 立刻報違規——
 > 「現在輪到」只接受四種角色。與其為暫停多開一個狀態,不如**讓它停在下一棒,
@@ -180,7 +180,9 @@
       **依賴上面那則**,時鐘沒做完不要開始
 -->
 
-- [階1] **把預設 provider 換成 `auto`,而且先拆掉擋路的那顆地雷。**
+<!-- 第 26 輪 builder 做掉,見「待驗收」。原文留著給 auditor 對判準:
+
+  [階1] **把預設 provider 換成 `auto`,而且先拆掉擋路的那顆地雷。**
       `--provider auto` 已經能用,但**預設**還是 `anthropic`,所以沒有帳號的人 clone 下來
       仍然是啟動就結束。**換預設值不是改一行**:第 24 輪試過一次,整套測試當場卡死——
       `tests/test_provider_selection.py:76` 設了一把假的 `XAI_API_KEY`,router 於是**真的把
@@ -190,6 +192,7 @@
       ——先寫一個「會打出去就失敗」的測試看它紅;(2) 再把 `DEFAULT_PROVIDER` 換成 `auto`
       並更新 `test_defaults_to_anthropic`;(3) `python -m pytest -q` 不減少通過數(現況 228)
       **而且跑得完**(卡死不算通過);(4) 拿一台**沒有任何金鑰**的環境變數狀態驗一次落到 ollama
+-->
 
 - [階6] **`loop_check` 的配額規則量錯對象。** 「階 5-7 不得超過半數」的用意是限制 planner
       **這一輪加了什麼**,但它量的是佇列**此刻剩下什麼**。佇列在「寫」耗盡、要到兩棒後的「想」才補,
@@ -221,6 +224,41 @@
 ## 待驗收
 
 <!-- builder 交棒。寫清楚動了哪些檔案、怎麼驗 -->
+
+- **[階1] 預設換成 `auto`,而且先擋掉那顆地雷 —— 做完了。** **230 passed(原 228,+2)。**
+      **動過的檔案**:`tests/conftest.py`(新增 `_no_real_network`)、`tests/test_no_network.py`(新增 2 個測試)、
+      `src/everliving/llm.py`(`DEFAULT_PROVIDER` → `auto`)、
+      `tests/test_cli_auth.py` 與 `tests/test_provider_selection.py`(**改了既有測試,理由見下**)。
+
+      **一、先做機制,再改那一行。判準是這樣寫的,我照著做。**
+      `_no_real_network` 擋在 **socket 層**——在每一個 SDK、每一個 provider、
+      每一條金鑰可能到達的路徑**底下**。理由寫在 code 裡:
+      **設定層的防護會一直輸,因為金鑰永遠有下一條路進來。**
+      證據就在隔壁:`_hide_the_developers_dotenv` 是**上一次**踩到時加的
+      (「`.env` 裡一個 `EVERLIVING_PROVIDER=groq` 把 8 個測試變成真實 API 呼叫、整套跑 200 秒」),
+      而它**擋不住這一次**——因為金鑰是測試自己設的,根本不經過 `.env`。**同一個形狀,第二次。**
+      **loopback 保持開放**(有測試會自己起 HTTP server),**但本機模型那個 port 例外**,
+      而且 port 是從 `OPENAI_COMPATIBLE` **讀出來的不是打字進去的**——
+      免得規則跟設定各走各的(`AGENTS.md`〈第五題〉)。
+
+      **二、⚠️ 我改了 4 個既有測試,請 auditor 逐一判斷有沒有掩蓋回歸:**
+      - `test_cli_auth.py` 三則:原本靠「預設是 anthropic」,改成**明寫 `--provider anthropic`**。
+        **它們失敗是因為對的理由**——在 router 底下,一個死掉的 provider **本來就該被繞過而不是結束程式**。
+        明寫 provider 保住它們真正在保護的東西:**指名一個你沒有金鑰的 provider,
+        要拿到一句能照著做的話,不是 stack trace。**
+      - `test_defaults_to_anthropic` → `test_defaults_to_the_router_so_no_key_is_needed_to_start`,
+        **而且不是改個名字了事**:新的斷言查 `_candidates` 的順序,並且釘住
+        **`DEFAULT_ORDER[-1] == "ollama"`**——「不會用完的那一個必須排最後」
+
+      **三、🔴 判準第 4 條的結果跟我預期的不一樣,照實寫:**
+      清掉所有金鑰之後跑,**`AnthropicLLMClient` 照樣建得起來**——Anthropic SDK
+      **不在建構時驗證憑證**(`test_cli_auth.py` 開頭那段 docstring 早就寫過這件事)。
+      所以順序是 groq 跳過 → grok 跳過 → **anthropic 建得起來** → ollama。
+      **一個沒有金鑰的人仍然玩得到,但走的是「呼叫時失敗再往下掉」那條路,不是「建不起來就跳過」。**
+      功能上成立(401 很快,而且 `test_an_outage_falls_through_to_the_next_one` 釘住了掉落路徑),
+      **但它會先浪費一次失敗的呼叫,我沒有假裝那是免費的。**
+      **我沒有順手去修 `AnthropicLLMClient` 讓它在建構時檢查金鑰**——
+      那會影響用其他 Anthropic 驗證方式(token / bedrock)的人,是另一則的題。
 
 - **[階1] AUTO ROUTER —— 做完了(`--provider auto` 可用;預設值另排一則)。** **228 passed(原 221,+7)。**
       **動過的檔案**:`src/everliving/router.py`(**新模組**)、`src/everliving/llm.py`
@@ -1087,3 +1125,14 @@ loop 的價值在**紀律**(builder 不能自我驗收、證據要附行號),不
       `test_provider_selection.py:76` 的假 `XAI_API_KEY` 讓 router **真的發出網路呼叫**。
       **那顆地雷比預設值重要——這套測試會打真的 API。** 預設值改回 `anthropic`,另排一則,
       判準第 1 條是先做「測試不可能打出去」的機制。**寧可小而完整。**
+- 第 25 輪 想(planner)@2026-08-07 by Claude Opus 5 —— 排 1 則階 1(換預設值 + 先擋地雷)。
+      **不是我發明的**:上一棒自己撞出來的,判準第 1 條直接寫成「先做機制再改那一行」。
+- 第 26 輪 寫(builder)@2026-08-07 by Claude Opus 5 —— **預設值換成 `auto` 了。230 passed(原 228)。**
+      `_no_real_network` 擋在 **socket 層**,在每個 SDK、每個 provider、每條金鑰路徑**底下**。
+      **設定層的防護會一直輸,因為金鑰永遠有下一條路進來**——證據就在隔壁:
+      `_hide_the_developers_dotenv` 是上一次踩到時加的,而它**擋不住這一次**。**同一形狀第二次。**
+      loopback 留著(有測試自己起 server),本機模型那個 port 例外,**而且 port 從設定讀不是打字**。
+      ⚠️ **改了 4 個既有測試**,理由寫在待驗收,**請 auditor 逐一判斷有沒有掩蓋回歸**。
+      🔴 **判準第 4 條結果跟預期不同,照實寫**:清光金鑰後 `AnthropicLLMClient` **照樣建得起來**
+      (SDK 不在建構時驗憑證)。沒有金鑰的人**仍然玩得到**,但走的是「呼叫時失敗再往下掉」,
+      **會先浪費一次失敗的呼叫,我沒有假裝那是免費的**,也沒有順手去改 Anthropic 的建構檢查。

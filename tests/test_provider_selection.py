@@ -79,9 +79,23 @@ def clean_env(monkeypatch):
 # --- selection -------------------------------------------------------------
 
 
-def test_defaults_to_anthropic(monkeypatch):
-    monkeypatch.setattr(llm, "AnthropicLLMClient", lambda **kw: "anthropic-client")
-    assert make_client() == "anthropic-client"
+def test_defaults_to_the_router_so_no_key_is_needed_to_start(monkeypatch):
+    """人類 2026-08-07 answered the provider question with 「AUTO ROUTER」.
+
+    Before this, starting with no key for the default provider exited the process — so
+    someone who cloned this without an account could not play at all, which is a strange
+    place to stand while aiming at 「最多人玩」. The default now chooses per call and ends
+    at the local model, which needs no key and cannot run out.
+
+    Asking for a provider by name still wins; that is checked below.
+    """
+    from everliving.router import DEFAULT_ORDER, RoutingLLMClient
+
+    client = make_client()
+
+    assert isinstance(client, RoutingLLMClient)
+    assert [name for name, _ in client._candidates] == list(DEFAULT_ORDER)
+    assert DEFAULT_ORDER[-1] == "ollama", "the one that cannot run out has to be last"
 
 
 def test_env_var_selects_grok(monkeypatch):

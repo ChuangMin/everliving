@@ -18,16 +18,16 @@ _log = logs.get_logger("llm")
 
 PROVIDERS = ("auto", "anthropic", "grok", "groq", "ollama")
 
-#: ⚠️ **還沒改成 `auto`,而且那是刻意的。**
+#: 人類 2026-08-07 答的就是這個:「AUTO ROUTER」——不選一個,**每一次呼叫**才選。
 #:
-#: 人類 2026-08-07 答的是「AUTO ROUTER」,`--provider auto` 已經可以用(見 `router.py`)。
-#: 但把**預設**換成 `auto` 是另一件事,而且試過一次就踩到地雷:
-#: `tests/test_provider_selection.py:76` 會設一把假的 `XAI_API_KEY`,於是 router 真的把
-#: Grok client 建了起來、**發出真實網路呼叫**,整套測試當場卡死。
+#: 它同時是「圍籬拆掉、目標變成最多人玩」之後的第一道門檻:在這之前,預設 provider 沒有
+#: 金鑰會讓程式**啟動就結束**,所以一個沒有帳號的人 clone 下來根本玩不到。`auto` 會跳過
+#: 建不起來的,最後落在本機 Ollama——**不設定任何東西也跑得起來。**
 #:
-#: 那個地雷本身比這個預設值重要:**這套測試在 provider 建得起來的時候,是會打真的 API 的。**
-#: 換預設值要連同那件事一起處理,不能順手改一行。已排進 `LOOP.md`。
-DEFAULT_PROVIDER = "anthropic"
+#: 換這一行之前先擋掉一顆地雷(第一次嘗試就是被它卡死的):**這套測試在 provider 建得
+#: 起來的時候會打真的 API**。現在 `tests/conftest.py` 的 `_no_real_network` 在 socket
+#: 層擋住,所以這個預設值再也不會把測試變成一串真實呼叫。
+DEFAULT_PROVIDER = "auto"
 
 # Cheap default so casual dev/playtest sessions don't rack up cost. Override with
 # EVERLIVING_MODEL. Model IDs change — check the provider's console if one 404s.
