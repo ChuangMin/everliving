@@ -134,6 +134,11 @@ class Session:
             else:
                 elapsed = time_since_last_seen(conn, self.agent_id)
 
+            # Read the gap first, then write the arrival: recording it above would make
+            # every gap zero, and the gap is what decides whether the night happened.
+            if not self.opened:
+                db.record_visit(conn, self.agent_id)
+
             offline = None
             # Only ever once per server run, so a page refresh can't re-bill it.
             if not self.opened and is_worth_simulating(elapsed):

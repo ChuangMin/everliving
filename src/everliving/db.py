@@ -106,6 +106,19 @@ CREATE TABLE IF NOT EXISTS world (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     started_at TEXT NOT NULL
 );
+
+-- Every time the player opened it. `player_state` above holds one row that each visit
+-- overwrites, which answers 「他現在在嗎」 and can never answer 「他有沒有再回來」 — and the
+-- second one is what 里程碑 0 is graded on (H-1: 一個人隔天想不想再打開).
+--
+-- Append-only, and deliberately not deduplicated by day: deciding here that two visits
+-- in one evening are "really" one would pick, in advance, which questions the data is
+-- allowed to answer. That is the mistake this table exists to undo.
+CREATE TABLE IF NOT EXISTS visits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL REFERENCES agents(id),
+    visited_at TEXT NOT NULL
+);
 """
 
 
@@ -244,6 +257,32 @@ def set_last_seen(conn: sqlite3.Connection, agent_id: int, when: str | None = No
         (agent_id, ts),
     )
     conn.commit()
+
+
+def record_visit(conn: sqlite3.Connection, agent_id: int, at: str | None = None) -> None:
+    """Write down that the player arrived. Nothing else.
+
+    Deliberately separate from `set_last_seen`, which records when he *stopped* — the
+    offline gap has to be measured from the end of the last session, not the start of
+    it. They are two different facts and an earlier draft of this coupled them for
+    convenience.
+
+    Arrival is also the honest moment to record: `leave` only fires if the player uses
+    the button, so a closed tab would otherwise erase the visit entirely — and 「他關掉
+    分頁就不算來過」 is exactly the kind of silent rule that makes a retention number lie.
+    """
+    conn.execute(
+        "INSERT INTO visits (agent_id, visited_at) VALUES (?, ?)", (agent_id, at or _now())
+    )
+    conn.commit()
+
+
+def get_visits(conn: sqlite3.Connection, agent_id: int) -> list[dict]:
+    """Every visit, oldest first."""
+    rows = conn.execute(
+        "SELECT * FROM visits WHERE agent_id = ? ORDER BY visited_at", (agent_id,)
+    ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def get_last_seen(conn: sqlite3.Connection, agent_id: int) -> str | None:
