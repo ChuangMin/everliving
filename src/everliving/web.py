@@ -40,8 +40,8 @@ from everliving.llm import (
     make_client,
 )
 from everliving.offline import (
-    OPENING_SCENE,
     is_worth_simulating,
+    opening_scene,
     simulate_offline_period,
     time_since_last_seen,
 )
@@ -162,7 +162,9 @@ class Session:
 
             payload = self.snapshot(conn)
             payload["offline"] = offline
-            payload["scene"] = offline["scene"] if offline else OPENING_SCENE
+            payload["scene"] = (
+                offline["scene"] if offline else opening_scene(conn, self.agent_id)
+            )
             # Always sent, including as null, and at the top level where the page
             # already reads it. Without this the night could name a place but never
             # what was going on there — the picture opened on a calm workshop no

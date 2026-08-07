@@ -51,6 +51,40 @@ DEFAULT_SCENE = "港城"
 #: personal scene and the one that says who he is without a line of dialogue.
 OPENING_SCENE = "工作間"
 
+#: The opening shot, one per world-clock stage (`world.STAGES`).
+#:
+#: `OPENING_SCENE` above was right about the first visit and wrong about the tenth:
+#: 「畫面都一樣」 is one of the four axes the human named under 「單調」. The answer is not
+#: a shuffle — a random opening flickers without meaning, and the complaint was that
+#: nothing accumulates. So the opening follows the one thing that does.
+#:
+#: Read as a sentence: he starts at his bench, and as the place gets worse he is pushed
+#: outward to where the trouble is — scavenging parts that rust through, then the
+#: substation that keeps cutting out, then the water itself.
+OPENING_BY_STAGE = ("工作間", "工作間", "回收場", "配電所", "潮線")
+
+#: State keys that mean his body is the story tonight. Matched loosely because the model
+#: writes these keys itself and has produced 「右手腕機能」「體能狀況」「雙手狀態」
+#: 「手部狀態」 across real runs — an exact list would silently stop matching the first
+#: time it phrased one differently.
+_BODY_MARKS = ("手", "體", "傷", "腕", "肩")
+
+
+def opening_scene(conn: sqlite3.Connection, agent_id: int, now: datetime | None = None) -> str:
+    """Where a visit with no offline period to show opens.
+
+    Decided, never rolled: same world and same state give the same answer, because a
+    picture that changes for no reason stops meaning anything.
+
+    His body outranks the world. Whatever the tide or the rationing is doing, a man
+    with an inflamed wrist is at his bench — that is where the evening actually is, and
+    it keeps the one piece of state the player has personally watched change from being
+    the one thing the picture ignores.
+    """
+    if any(mark in key for key in db.get_state(conn, agent_id) for mark in _BODY_MARKS):
+        return OPENING_SCENE
+    return OPENING_BY_STAGE[world.pressure(conn, now).stage]
+
 #: What is happening, as opposed to where. `scene` alone kept producing a mismatch the
 #: player noticed immediately: he'd describe a welding arc on a valve face and the
 #: picture showed a generic workshop. A place tag can't fix that, because the place was
