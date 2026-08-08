@@ -73,7 +73,7 @@ class Frame:
         self.pen = ImageDraw.Draw(self.albedo)
         self.lamps: list[tuple[float, float, float, float]] = []
         self.beams: list[tuple[list[tuple[float, float]], float]] = []
-        self.ambient = 0.13
+        self.ambient = 0.20
 
     # -- drawing helpers take 0..1 coordinates, so a composition reads as a layout --
 
@@ -155,7 +155,7 @@ class Frame:
         cool = np.array([0.52, 0.74, 1.0], dtype=np.float32)
         lit = arr * (light * warm + self.ambient * cool)
 
-        lit = 1.0 - np.exp(-lit * 2.15)  # roll the highlights off instead of clipping
+        lit = 1.0 - np.exp(-lit * 2.7)  # roll the highlights off instead of clipping
         out = Image.fromarray(np.clip(lit * 255, 0, 255).astype(np.uint8))
 
         glow = out.filter(ImageFilter.GaussianBlur(22))
@@ -167,7 +167,7 @@ class Frame:
 def _vignette(img: Image.Image) -> Image.Image:
     yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
     d = np.sqrt(((xx / W - 0.5) * 1.15) ** 2 + (yy / H - 0.5) ** 2)
-    mask = np.clip(1.0 - (d - 0.38) * 1.25, 0.55, 1.0)[:, :, None]
+    mask = np.clip(1.0 - (d - 0.42) * 1.05, 0.72, 1.0)[:, :, None]
     return Image.fromarray(
         np.clip(np.asarray(img).astype(np.float32) * mask, 0, 255).astype(np.uint8)
     )
@@ -303,10 +303,10 @@ def workshop(f: Frame, stage: int) -> None:
 
     # Rationing dims the lamp as the world worsens — stage 3 is 「限電從一週一次變三次」.
     f.beam([(0.430, 0.386), (0.478, 0.386), (0.70, 1.0), (0.21, 1.0)],
-           power=0.42 - wear * 0.12)
-    f.lamp(0.470, 0.665, 0.36, power=1.55 - wear * 0.36)
+           power=0.50 - wear * 0.12)
+    f.lamp(0.470, 0.665, 0.44, power=1.85 - wear * 0.34)
     f.lamp(0.453, 0.390, 0.075, power=0.85)
-    f.ambient = 0.135 - wear * 0.030
+    f.ambient = 0.205 - wear * 0.030
 
 
 SCENES = {"工作間": workshop}
