@@ -189,22 +189,24 @@ try {
 try {
   globalThis.__apply({state:{}, threads:[], scene:'配電所',
                       scene_image:'/scenes/配電所-s3.webp'});
-  const href = nodes.get('art').getAttribute('href');
-  check(href === '/scenes/配電所-s3.webp' && nodes.get('art').style.display !== 'none',
+  check(nodes.get('art').getAttribute('href') === '/scenes/配電所-s3.webp',
         'a scene with a picture shows the picture');
 
   // He tags a place on some lines and not others. A turn without one must leave the
   // picture alone, or the art flickers away every time he speaks without saying where
   // he is — and nothing in the payload would look wrong.
   globalThis.__apply({state:{}, threads:[]});
-  check(nodes.get('art').getAttribute('href') === '/scenes/配電所-s3.webp'
-        && nodes.get('art').style.display !== 'none',
+  check(nodes.get('art').getAttribute('href') === '/scenes/配電所-s3.webp',
         'a reply that names no place leaves the picture where it was');
 
   // The vector scene is the fallback, so a place with no file must not leave the last
   // picture hanging behind a completely different location.
   globalThis.__apply({state:{}, threads:[], scene:'工作間', scene_image:null});
-  check(nodes.get('art').style.display === 'none',
+  // Absence is a missing href, never `display:none`: hiding the element stops the
+  // browser resolving the file's dimensions, and the next picture comes back magnified
+  // across the whole frame. That bug shipped once and was found by looking at a
+  // screenshot, so it gets an assertion.
+  check(nodes.get('art').getAttribute('href') === undefined,
         'a place with no picture falls back to the drawn scene');
 } catch (e) { check(false, `scene art threw: ${e.message}`); }
 

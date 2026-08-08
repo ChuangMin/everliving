@@ -318,8 +318,14 @@
          below still land on top, so 焊接 still throws sparks onto a photograph.
          If the file 404s the element simply draws nothing and the vector scene shows
          through, which makes the fallback free rather than a code path to maintain. -->
+    <!-- Never hidden, and that is load-bearing rather than tidiness. This element
+         started out as `display:none` until a picture arrived, and `slice` needs the
+         file's own dimensions to work out how to cover the box — which a display:none
+         element has not resolved. Revealing it magnified a few pixels across the whole
+         frame: a soft bright blob where a workshop should have been. An `<image>` with
+         no `href` already paints nothing, so absence needs no second mechanism. -->
     <image id="art" x="0" y="0" width="1000" height="420"
-           preserveAspectRatio="xMidYMid slice" style="display:none"></image>
+           preserveAspectRatio="xMidYMid slice"></image>
     <g id="action"></g>
     <rect id="grainRect" width="1000" height="420" filter="url(#grain)" opacity=".045"/>
     <rect width="1000" height="420" fill="url(#vignetteGrad)"/>
@@ -843,9 +849,10 @@
       // Plain `href`, not `xlink:href`: SVG2, and every browser this runs in supports
       // it. The legacy spelling would be a second code path kept alive for nobody.
       node.setAttribute('href', url);
-      node.style.display = '';
     } else {
-      node.style.display = 'none';
+      // Not `display:none` — see the comment on the element. Taking the href away is
+      // what makes it paint nothing, and it leaves the box measurable for next time.
+      node.removeAttribute('href');
     }
   }
 
