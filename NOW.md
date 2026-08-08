@@ -8,7 +8,17 @@
 >
 > **如果你是被當成四種角色之一叫起來的**:改讀 `LOOP.md` 的「現在輪到」,契約在 `AGENTS.md`〈四種角色〉。
 
-**最後更新**:2026-08-08 by Claude Opus 5(`LOOP.md` 第 35 輪 builder)
+**最後更新**:2026-08-08 by Claude Opus 5(`LOOP.md` 第 36 輪 builder)
+
+## 🎨 給人類:畫面現在等的是圖,不是程式
+
+**丟一張圖進 `src/everliving/static/scenes/`,重新整理就換掉了。** 不用重開伺服器、不用改任何 code。
+**檔名規則、尺寸、以及六個場景的生圖 prompt 全部寫在那個資料夾的 `README.md`。**
+
+**先做 `工作間.webp` 一張就看得到差別**(開場預設就是那裡)。
+想看到時間在走再補 `工作間-s2.webp` / `工作間-s4.webp`。
+
+⚠️ **agent 這邊沒有生圖工具,畫不出來。** 管線是通的、端到端驗過,**缺的是圖本身。**
 
 ---
 
@@ -222,7 +232,7 @@ python -m everliving.web --provider auto
 
 ## Loop 收尾檢查(每次結束前跑一遍)
 
-1. 測試真的跑過,而且是**這一輪跑的**(`python -m pytest -q`,現況 **257 passed**)
+1. 測試真的跑過,而且是**這一輪跑的**(`python -m pytest -q`,現況 **271 passed**)
 2. 動過 `LOOP.md`:`python tools/loop_check.py` 要 exit 0
    (**現在只剩心跳那則紅,人類明示照跑**——其餘任何一則都要當真)
 3. 動過 `static/index.html`:`node tests/page_check.js` **而且**

@@ -183,6 +183,31 @@ try {
         'no world in the payload hides the panel instead of showing an empty one');
 } catch (e) { check(false, `world panel threw: ${e.message}`); }
 
+// Scene art. 人類 2026-08-08: 「看不懂你的美術以及視覺畫面 太不行了」, and chose image
+// assets over redrawing. Nobody here can draw, so what is being checked is the pipeline:
+// a file that exists reaches the screen, and its absence changes nothing.
+try {
+  globalThis.__apply({state:{}, threads:[], scene:'配電所',
+                      scene_image:'/scenes/配電所-s3.webp'});
+  const href = nodes.get('art').getAttribute('href');
+  check(href === '/scenes/配電所-s3.webp' && nodes.get('art').style.display !== 'none',
+        'a scene with a picture shows the picture');
+
+  // He tags a place on some lines and not others. A turn without one must leave the
+  // picture alone, or the art flickers away every time he speaks without saying where
+  // he is — and nothing in the payload would look wrong.
+  globalThis.__apply({state:{}, threads:[]});
+  check(nodes.get('art').getAttribute('href') === '/scenes/配電所-s3.webp'
+        && nodes.get('art').style.display !== 'none',
+        'a reply that names no place leaves the picture where it was');
+
+  // The vector scene is the fallback, so a place with no file must not leave the last
+  // picture hanging behind a completely different location.
+  globalThis.__apply({state:{}, threads:[], scene:'工作間', scene_image:null});
+  check(nodes.get('art').style.display === 'none',
+        'a place with no picture falls back to the drawn scene');
+} catch (e) { check(false, `scene art threw: ${e.message}`); }
+
 // What's happening, on top of where he is. Each one has to actually draw something,
 // or the tag is costing prompt room and buying nothing.
 for(const action of ['焊接','停電','淹水','起霧']){

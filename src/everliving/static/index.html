@@ -312,6 +312,14 @@
       <g id="nearDrift" class="drift"><g id="near"></g></g>
     </g></g>
     <g id="rain" opacity=".5"></g>
+    <!-- A picture from `static/scenes/`, when one exists for this place. It sits here
+         rather than behind the whole svg on purpose: everything above it — sky, water,
+         the drawn structures — is covered, while the action overlay, grain and vignette
+         below still land on top, so 焊接 still throws sparks onto a photograph.
+         If the file 404s the element simply draws nothing and the vector scene shows
+         through, which makes the fallback free rather than a code path to maintain. -->
+    <image id="art" x="0" y="0" width="1000" height="420"
+           preserveAspectRatio="xMidYMid slice" style="display:none"></image>
     <g id="action"></g>
     <rect id="grainRect" width="1000" height="420" filter="url(#grain)" opacity=".045"/>
     <rect width="1000" height="420" fill="url(#vignetteGrad)"/>
@@ -823,9 +831,26 @@
   }
 
   /* ---- draw ---- */
-  let currentScene = '工作間', currentAction = null;
+  let currentScene = '工作間', currentAction = null, currentArt = null;
+
+  /* Point the picture layer at whatever the server resolved, or take it away.
+     The url is never assembled here: the server knows which files exist and which
+     stage is in force, and a page that guessed would probe urls and read 404s as
+     「沒有這張」 — one failed request per visit, in the player's console. */
+  function art(url){
+    const node = $('art');
+    if(url){
+      // Plain `href`, not `xlink:href`: SVG2, and every browser this runs in supports
+      // it. The legacy spelling would be a second code path kept alive for nobody.
+      node.setAttribute('href', url);
+      node.style.display = '';
+    } else {
+      node.style.display = 'none';
+    }
+  }
 
   function drawScene(scene, action){
+    art(currentArt);
     const spec = PLACES[scene] || PLACES['港城'];
     const now = new Date();
     const hour = now.getHours() + now.getMinutes()/60;
@@ -1050,6 +1075,9 @@
     if(data.ledger) lastLedger = data.ledger;
     readout(data.state); threads(data.threads); weather(data.world);
     if('action' in data) currentAction = data.action || null;
+    /* Art travels with the scene and never on its own: he doesn't name a place on
+       every line, and those turns are meant to leave the picture where it is. */
+    if('scene' in data){ currentArt = data.scene_image || null; }
     if(data.scene) currentScene = data.scene;
     if(data.scene || 'action' in data) drawScene(currentScene, currentAction);
     if($('bench').getAttribute('data-open') === '1') bench();

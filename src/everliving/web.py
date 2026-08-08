@@ -28,6 +28,7 @@ import webbrowser
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote
 
 from everliving import db, logs, persona, visitor, world
 from everliving.agent_loop import respond
@@ -47,6 +48,62 @@ from everliving.offline import (
 )
 
 PAGE = Path(__file__).parent / "static" / "index.html"
+
+#: Drop a picture in here and it is on screen next visit. Nothing else to edit.
+#:
+#: `<場景>.webp` covers a place; `<場景>-s<階段>.webp` covers that place at one stage of
+#: the world clock and wins when it exists. Partial sets are the expected state — a
+#: place with only the general picture keeps using it at every stage, which is worse
+#: than a full set and much better than a gap.
+SCENES_DIR = Path(__file__).parent / "static" / "scenes"
+
+#: Suffix decides the type, and the type is sent explicitly: `nosniff` is already on
+#: every response, so a picture served as the wrong type would simply not render.
+ART_TYPES = {
+    ".webp": "image/webp",
+    ".avif": "image/avif",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+}
+
+
+def _gallery() -> dict[str, Path]:
+    """URL path → file, built from the directory listing rather than from any request.
+
+    Re-read per request on purpose. They will generate these one at a time and look
+    after each one, and a map built once at startup would mean a restart per attempt —
+    enough friction that nobody iterates.
+    """
+    try:
+        entries = list(SCENES_DIR.iterdir())
+    except (FileNotFoundError, NotADirectoryError):
+        return {}
+    return {
+        f"/scenes/{item.name}": item
+        for item in entries
+        if item.is_file() and item.suffix.lower() in ART_TYPES
+    }
+
+
+def scene_image_url(scene: str | None, stage: int | None) -> str | None:
+    """The picture for this place at this point in the world's life, if one exists.
+
+    Resolved here rather than on the page: a page that guessed would have to probe URLs
+    and read 404s as 「沒有這張」, which cannot be tested from a stub DOM and puts a
+    failed request in the player's console on every single visit.
+    """
+    if not scene:
+        return None
+    gallery = _gallery()
+    names = [f"{scene}-s{stage}"] if stage is not None else []
+    names.append(scene)
+    for name in names:
+        for suffix in ART_TYPES:
+            key = f"/scenes/{name}{suffix}"
+            if key in gallery:
+                return key
+    return None
 
 #: One request at a time. The LLM calls are slow and SQLite has a single writer,
 #: and a local playtest has exactly one player, so serialising is both correct
@@ -192,7 +249,7 @@ class Session:
             # what was going on there — the picture opened on a calm workshop no
             # matter what the narrative said had happened in it.
             payload["action"] = offline["action"] if offline else None
-            return payload
+            return self.attach_scene_image(payload)
         finally:
             conn.close()
 
@@ -214,7 +271,7 @@ class Session:
                 {"kind": a["kind"], "ref": a["ref"]}
                 for a in db.get_media_assets(conn, turn.event_id)
             ]
-            return payload
+            return self.attach_scene_image(payload)
         finally:
             conn.close()
 
@@ -257,9 +314,25 @@ class Session:
                 "remaining": self.auto_cap - self.auto_used,
                 "cap": self.auto_cap,
             }
-            return payload
+            return self.attach_scene_image(payload)
         finally:
             conn.close()
+
+    def attach_scene_image(self, payload: dict) -> dict:
+        """Hang the picture on a payload, travelling with `scene` and never without it.
+
+        The two keys appear and disappear together, and that is load-bearing. A reply
+        carries a scene only when the model tagged one; the rest of the time the page is
+        meant to keep the place it is already showing. Sending `scene_image: null` on
+        those turns would wipe the picture on every sentence he said without naming
+        where he was — the art would flicker away mid-conversation and nothing in the
+        payload would look wrong.
+        """
+        if "scene" not in payload:
+            return payload
+        stage = (payload.get("world") or {}).get("stage")
+        payload["scene_image"] = scene_image_url(payload["scene"], stage)
+        return payload
 
     def snapshot_only(self) -> dict:
         conn = self._connect()
@@ -301,11 +374,20 @@ def _make_handler(session: Session):
             self._send(status, json.dumps(payload, ensure_ascii=False).encode(), "application/json")
 
         def do_GET(self):
-            # Exact match only — no path is ever joined onto a filesystem path.
-            if self.path in ("/", "/index.html"):
+            # Exact match only — no path is ever joined onto a filesystem path. Scene
+            # art keeps that promise rather than retiring it: the lookup table is built
+            # from the directory listing and the request path is only ever used as a
+            # key, so `..`, encoded or not, simply misses and 404s like any other
+            # spelling mistake.
+            path = unquote(self.path.split("?", 1)[0])
+            if path in ("/", "/index.html"):
                 self._send(200, page_bytes, "text/html; charset=utf-8")
-            else:
-                self._json(404, {"error": "not found"})
+                return
+            picture = _gallery().get(path)
+            if picture is not None:
+                self._send(200, picture.read_bytes(), ART_TYPES[picture.suffix.lower()])
+                return
+            self._json(404, {"error": "not found"})
 
         def do_POST(self):
             routes = {"/api/open": self._open, "/api/say": self._say,
