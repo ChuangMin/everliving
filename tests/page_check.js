@@ -151,6 +151,38 @@ try {
         'workbench empties instead of showing stale rows');
 } catch (e) { check(false, `workbench threw: ${e.message}`); }
 
+// The world he is standing in. Built in 第 16 輪, it reached the prompt and stopped
+// there for eighteen rounds, so the one thing accumulating in this game was invisible
+// to the player it was built to answer.
+try {
+  globalThis.__apply({
+    state: {}, threads: [],
+    world: {description: '水要濾兩次,第二次的濾芯會泛黃。', stage: 1, stages: 5, day: 6},
+  });
+  const dots = nodes.get('weatherDots');
+  const on = [...dots.children].filter(n => n.className === 'on').length;
+  check(nodes.get('weather').hidden === false
+        && nodes.get('weatherText').textContent === '水要濾兩次,第二次的濾芯會泛黃。'
+        && nodes.get('weatherDay').textContent === '世界第 6 天',
+        'the world he is standing in is on the page, not only in the prompt');
+
+  // The count comes off the payload. A literal in the markup would quietly stop
+  // matching `world.STAGES` the day a stage is added, and nothing would say so.
+  check(dots.children.length === 5 && on === 2,
+        `stage dots follow the payload's own count (${on} lit of ${dots.children.length})`);
+
+  // The dots are aria-hidden, so this is the only route the same fact has to a screen
+  // reader. `prefers-reduced-motion` was 0/87 for exactly this kind of assumption.
+  check(/第 2 階段/.test(nodes.get('weather').getAttribute('aria-label') || ''),
+        'the stage reaches a screen reader as words, not only as dots');
+
+  // A blank panel reads as "nothing is happening" — the impression this exists to
+  // remove — so a payload without a world must hide it rather than empty it.
+  globalThis.__apply({state:{}, threads:[]});
+  check(nodes.get('weather').hidden === true,
+        'no world in the payload hides the panel instead of showing an empty one');
+} catch (e) { check(false, `world panel threw: ${e.message}`); }
+
 // What's happening, on top of where he is. Each one has to actually draw something,
 // or the tag is costing prompt room and buying nothing.
 for(const action of ['焊接','停電','淹水','起霧']){

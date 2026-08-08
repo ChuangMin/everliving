@@ -29,7 +29,7 @@ from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from everliving import db, logs, persona, visitor
+from everliving import db, logs, persona, visitor, world
 from everliving.agent_loop import respond
 from everliving.config import load_dotenv
 from everliving.llm import (
@@ -88,8 +88,25 @@ class Session:
         return conn
 
     def snapshot(self, conn: sqlite3.Connection) -> dict:
+        current = world.pressure(conn)
         return {
             "name": self.agent["name"],
+            # The clock built in 第 16 輪 reached the prompt and stopped there, so the
+            # one thing accumulating in this game was invisible to the player it was
+            # built for. `description` is the same string `describe_for_prompt` wraps —
+            # deliberately the same object, so screen and prompt cannot drift into
+            # describing different worlds.
+            #
+            # `stages` travels with it because the page draws stage dots, and a count
+            # typed into the markup would silently stop matching `world.STAGES` the day
+            # a stage is added. `day` is elapsed time, not a level: it has no ceiling,
+            # which is why there is no bar here for the page to fill.
+            "world": {
+                "description": current.description,
+                "stage": current.stage,
+                "stages": len(world.STAGES),
+                "day": current.index,
+            },
             "state": db.get_state(conn, self.agent_id),
             "threads": [t["description"] for t in db.get_open_threads(conn, self.agent_id)],
             # What you asked him for and haven't got an answer to yet. The other

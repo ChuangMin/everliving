@@ -37,8 +37,14 @@
      1440×780 it took the workbench, the lamp and the man's legs. `max()` puts a floor
      under the height that scales with the width, which costs nothing at ordinary
      window shapes and stops the wide ones from cropping the scene in half. */
-  .scene{position:relative;height:max(42vh,26vw);max-height:62vh;min-height:260px;
-         overflow:hidden;flex:none}
+  /* Sticky, because the conversation grows downwards and the picture used to leave with
+     it: a few exchanges in, you were reading text on a black page and the place he is
+     standing in had scrolled off the top. The scene isn't decoration on this page — it
+     is the only thing showing that the world moved — so it stays put while the talk
+     scrolls under it. Below `.bench` (z-index 5) on purpose: the workbench is a panel
+     you deliberately opened, and it is allowed to cover the window. */
+  .scene{position:sticky;top:0;z-index:2;height:max(42vh,26vw);max-height:62vh;
+         min-height:260px;overflow:hidden;flex:none;background:var(--brine)}
   .scene svg{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* A seam of light along the sill: the room is darker than what's outside it. */
   .scene::after{
@@ -107,6 +113,19 @@
         border-bottom:1px solid var(--edge);padding-bottom:12px;margin-bottom:26px}
   h1{font-size:19px;font-weight:400;letter-spacing:.42em;margin:0;color:var(--salt)}
   .head .role{color:var(--faint)}
+
+  /* The world, above his name, because it is the thing he is standing in rather than
+     anything he did. Quiet on purpose: it must be legible without competing with the
+     narrative, which is still the product. */
+  .weather{margin:0 0 24px;padding-bottom:14px;border-bottom:1px solid var(--edge)}
+  .weather p{margin:0}
+  .weather .said{font-size:15px;line-height:1.85;color:var(--dim)}
+  .weather .meta{display:flex;align-items:center;gap:10px;margin-top:10px;
+                 color:var(--faint)}
+  /* Dots, not a bar. Days have no ceiling — a bar would have to invent an end for the
+     world that nothing in the design decided. Stages have a real count. */
+  .weather .dots{letter-spacing:.34em;color:var(--rust)}
+  .weather .dots .on{color:var(--sodium)}
 
   /* The offline narrative is the product. It gets the most air on the page. */
   .narrative{margin:0 0 26px;padding-left:20px;border-left:1px solid var(--rust)}
@@ -329,6 +348,14 @@
 </div>
 
 <main>
+  <div class="weather" id="weather" hidden>
+    <p class="said" id="weatherText"></p>
+    <p class="meta stencil">
+      <span class="dots" id="weatherDots" aria-hidden="true"></span>
+      <span id="weatherDay"></span>
+    </p>
+  </div>
+
   <div class="head">
     <h1 id="who">陌洲</h1>
     <span class="role stencil">維生系統・技師</span>
@@ -905,6 +932,31 @@
       li.appendChild(b); li.appendChild(s); ul.appendChild(li);
     });
   }
+  /* The world he is standing in. Hidden rather than blank when the server hasn't said
+     yet, because an empty panel reads as "nothing is happening" — the exact impression
+     this exists to remove. */
+  function weather(w){
+    const box = $('weather');
+    if(!w || !w.description){ box.hidden = true; return; }
+    $('weatherText').textContent = w.description;
+
+    /* The count comes off the payload, never a literal here: a number typed into the
+       page stops matching `world.STAGES` the day a stage is added, and nothing would
+       say so. */
+    const dots = $('weatherDots'); dots.textContent = '';
+    for(let i = 0; i < w.stages; i++){
+      const s = document.createElement('span');
+      if(i <= w.stage) s.className = 'on';
+      s.textContent = i <= w.stage ? '●' : '○';
+      dots.appendChild(s);
+    }
+    $('weatherDay').textContent = '世界第 ' + w.day + ' 天';
+    /* The dots are aria-hidden, so the same fact has to reach a screen reader as
+       words or it reaches it not at all. */
+    box.setAttribute('aria-label',
+      '這個世界的樣子:第 ' + (w.stage + 1) + ' 階段,共 ' + w.stages + ' 階段;世界第 ' + w.day + ' 天');
+    box.hidden = false;
+  }
   function threads(list){
     const box = $('thread');
     if(!list || !list.length){ box.hidden = true; return; }
@@ -996,7 +1048,7 @@
     lastState = data.state || {}; lastThreads = data.threads || [];
     if('delegations' in data) lastAsks = data.delegations || [];
     if(data.ledger) lastLedger = data.ledger;
-    readout(data.state); threads(data.threads);
+    readout(data.state); threads(data.threads); weather(data.world);
     if('action' in data) currentAction = data.action || null;
     if(data.scene) currentScene = data.scene;
     if(data.scene || 'action' in data) drawScene(currentScene, currentAction);
