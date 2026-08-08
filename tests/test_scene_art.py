@@ -11,6 +11,7 @@ failed request in the player's console on every visit.
 """
 
 import json
+import re
 import threading
 import urllib.error
 import urllib.request
@@ -136,6 +137,37 @@ def _age(session, days):
     conn.execute("UPDATE world SET started_at = ? WHERE id = 1", (started,))
     conn.commit()
     conn.close()
+
+
+def test_the_page_is_allowed_to_load_the_pictures_the_server_offers(session, gallery):
+    """The server handing out a URL means nothing if the page's CSP refuses to fetch it.
+
+    This is the bug this file was written around and did not catch. `img-src` was
+    `data:` alone — correct for a page that drew everything itself — so `/scenes/…` was
+    refused before a request ever left the browser. Every other layer was right: the
+    file, the route, the payload, the markup. The one thing nothing here read was the
+    policy, and a blocked image looks exactly like a broken one.
+
+    So the assertion is the coupling, not the string: the moment the server can answer
+    with a same-origin path, the page has to be permitted to ask for it.
+    """
+    (gallery / "工作間.webp").write_bytes(b"x")
+    url = session.open()["scene_image"]
+    assert url.startswith("/scenes/"), "same-origin path, so 'self' is what governs it"
+
+    # The tag itself, not the first line that happens to mention it. The first version
+    # of this test scanned the file for `img-src` and found the prose comment above the
+    # tag — which names the directive and quotes `'self'` — so it passed against the
+    # very policy it was written to reject. 〈第五題〉, committed by the test.
+    tag = re.search(
+        r'http-equiv="Content-Security-Policy"\s*content="([^"]*)"',
+        web.PAGE.read_text(encoding="utf-8"),
+    )
+    assert tag, "頁面沒有 CSP meta 標籤,這個測試就沒有在量任何東西"
+    directive = next(d for d in tag.group(1).split(";") if "img-src" in d)
+    assert "'self'" in directive, (
+        f"伺服器會送 {url},但頁面的 CSP 不准載入同源圖片:{directive.strip()}"
+    )
 
 
 # ---- over a real socket, because the routing comment claims a security property ----
