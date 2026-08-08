@@ -61,8 +61,30 @@ METAL_DARK = (54, 64, 70)
 GLASS = (38, 56, 64)
 
 
+#: Surfaces, and how hard each one bites into the flat colour. CC0 greyscale photographs
+#: from ambientCG — see `tools/textures/PROVENANCE.md`. They carry no colour on purpose:
+#: the palette above is the scene's, and three photographs' worth of white balance would
+#: fight the one sodium lamp that is supposed to own every warm pixel in the frame.
+MATERIALS = {"concrete": 1, "metal": 2, "rust": 3}
+TEXTURE_STRENGTH = {"concrete": 0.18, "metal": 0.20, "rust": 0.38}
+TEXTURE_TILE = {"concrete": 900, "metal": 620, "rust": 380}
+TEXTURES = Path(__file__).resolve().parent / "textures"
+
+
 def _lerp(a, b, t):
     return tuple(int(round(x + (y - x) * t)) for x, y in zip(a, b))
+
+
+def _tiled(name: str, size: tuple[int, int]) -> np.ndarray:
+    """One texture, repeated across the frame, as 0..1 greyscale."""
+    tile = Image.open(TEXTURES / f"{name}.jpg").convert("L")
+    step = TEXTURE_TILE[name]
+    tile = tile.resize((step, step), Image.LANCZOS)
+    sheet = Image.new("L", size)
+    for y in range(0, size[1], step):
+        for x in range(0, size[0], step):
+            sheet.paste(tile, (x, y))
+    return np.asarray(sheet).astype(np.float32) / 255.0
 
 
 class Frame:
@@ -71,26 +93,36 @@ class Frame:
     def __init__(self):
         self.albedo = Image.new("RGB", (W * SS, H * SS), WALL)
         self.pen = ImageDraw.Draw(self.albedo)
+        # Which surface each pixel is, painted alongside the colour. Texture is applied
+        # once per material at the end rather than per shape, so a bench drawn in thirty
+        # strokes still gets one continuous run of rust across it instead of thirty
+        # tiles that stop at every seam.
+        self.mat = Image.new("L", (W * SS, H * SS), MATERIALS["concrete"])
+        self.mat_pen = ImageDraw.Draw(self.mat)
         self.lamps: list[tuple[float, float, float, float]] = []
         self.beams: list[tuple[list[tuple[float, float]], float]] = []
         self.ambient = 0.20
 
     # -- drawing helpers take 0..1 coordinates, so a composition reads as a layout --
 
-    def box(self, x0, y0, x1, y1, fill):
-        self.pen.rectangle(
-            [x0 * W * SS, y0 * H * SS, x1 * W * SS, y1 * H * SS], fill=fill
-        )
+    def box(self, x0, y0, x1, y1, fill, tex=None):
+        at = [x0 * W * SS, y0 * H * SS, x1 * W * SS, y1 * H * SS]
+        self.pen.rectangle(at, fill=fill)
+        if tex:
+            self.mat_pen.rectangle(at, fill=MATERIALS[tex])
 
-    def poly(self, points, fill):
-        self.pen.polygon([(x * W * SS, y * H * SS) for x, y in points], fill=fill)
+    def poly(self, points, fill, tex=None):
+        at = [(x * W * SS, y * H * SS) for x, y in points]
+        self.pen.polygon(at, fill=fill)
+        if tex:
+            self.mat_pen.polygon(at, fill=MATERIALS[tex])
 
-    def disc(self, cx, cy, r, fill):
+    def disc(self, cx, cy, r, fill, tex=None):
         rx, ry = r * W * SS, r * W * SS
-        self.pen.ellipse(
-            [cx * W * SS - rx, cy * H * SS - ry, cx * W * SS + rx, cy * H * SS + ry],
-            fill=fill,
-        )
+        at = [cx * W * SS - rx, cy * H * SS - ry, cx * W * SS + rx, cy * H * SS + ry]
+        self.pen.ellipse(at, fill=fill)
+        if tex:
+            self.mat_pen.ellipse(at, fill=MATERIALS[tex])
 
     def line(self, x0, y0, x1, y1, width, fill):
         self.pen.line(
@@ -129,6 +161,20 @@ class Frame:
     def render(self) -> Image.Image:
         flat = self.albedo.resize((W, H), Image.LANCZOS)
         arr = np.asarray(flat).astype(np.float32) / 255.0
+
+        # Surface, before light. Photographs modulate the flat colour rather than
+        # replacing it, so the picture gains rust and tool marks without gaining three
+        # other people's white balance. NEAREST on the material map: it holds ids, and
+        # a smooth resample would invent surfaces along every boundary.
+        ids = np.asarray(self.mat.resize((W, H), Image.NEAREST))
+        for name, ident in MATERIALS.items():
+            where = ids == ident
+            if not where.any():
+                continue
+            grain = _tiled(name, (W, H))
+            strength = TEXTURE_STRENGTH[name]
+            factor = (1.0 - strength) + 2.0 * strength * grain
+            arr[where] *= factor[where][:, None]
 
         yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
         xx /= W
@@ -221,8 +267,8 @@ def workshop(f: Frame, stage: int) -> None:
     f.disc(0.115, 0.155, 0.020, WALL)
 
     # --- the bench ----------------------------------------------------------------
-    f.box(0, BENCH_FAR, 1, BENCH_NEAR, BENCH)
-    f.box(0, BENCH_NEAR, 1, 1.0, BENCH_FRONT)
+    f.box(0, BENCH_FAR, 1, BENCH_NEAR, BENCH, tex="metal")
+    f.box(0, BENCH_NEAR, 1, 1.0, BENCH_FRONT, tex="metal")
     f.line(0, BENCH_NEAR, 1, BENCH_NEAR, 0.0018, _lerp(BENCH, SALT, 0.35))
     for i in range(30):  # scars: this bench is worked on, not bought
         x = 0.02 + (i * 0.0391) % 0.94
@@ -239,23 +285,23 @@ def workshop(f: Frame, stage: int) -> None:
     # A shade over the bulb, not across it: the first version put the shape through the
     # middle of the lamp, so it read as a card floating in front of the light.
     f.poly([(0.424, 0.330), (0.482, 0.330), (0.508, 0.386), (0.398, 0.386)],
-           _lerp(WALL, METAL, 0.75))
+           _lerp(WALL, METAL, 0.75), tex="metal")
     f.disc(0.453, 0.390, 0.021, _lerp(SODIUM, SALT, 0.35))  # the bulb
 
     # --- what is on the bench, back to front --------------------------------------
     # A vice, bolted down at the left. Blocky and unmistakable.
     f.shadow(0.168, 0.706, 0.075)
-    f.box(0.115, 0.560, 0.222, 0.700, _lerp(WALL, METAL_DARK, 0.85))
-    f.box(0.128, 0.520, 0.209, 0.566, _lerp(WALL, METAL, 0.55))
+    f.box(0.115, 0.560, 0.222, 0.700, _lerp(WALL, METAL_DARK, 0.85), tex="metal")
+    f.box(0.128, 0.520, 0.209, 0.566, _lerp(WALL, METAL, 0.55), tex="metal")
     f.box(0.156, 0.470, 0.178, 0.528, _lerp(WALL, METAL, 0.65))
     f.disc(0.167, 0.464, 0.014, _lerp(WALL, METAL, 0.75))
     f.rim(0.128, 0.520, 0.209)
 
     # The filter housing, opened up. The object the writing keeps naming.
     f.shadow(0.368, 0.690, 0.086)
-    f.box(0.292, 0.578, 0.444, 0.684, _lerp(WALL, METAL_DARK, 0.95))
-    f.disc(0.292, 0.631, 0.0265, _lerp(WALL, METAL, 0.5))
-    f.disc(0.444, 0.631, 0.0265, _lerp(WALL, METAL, 0.62))
+    f.box(0.292, 0.578, 0.444, 0.684, _lerp(WALL, METAL_DARK, 0.95), tex="rust")
+    f.disc(0.292, 0.631, 0.0265, _lerp(WALL, METAL, 0.5), tex="rust")
+    f.disc(0.444, 0.631, 0.0265, _lerp(WALL, METAL, 0.62), tex="rust")
     f.disc(0.444, 0.631, 0.0170, _lerp(WALL, DEEP, 0.7))
     f.rim(0.292, 0.578, 0.444)
 
@@ -281,14 +327,14 @@ def workshop(f: Frame, stage: int) -> None:
         f.shadow(x + 0.004, y + length * 0.6, head * 0.75, length * 0.42, strength=0.30)
         f.line(x, y, x, y + length, 0.0060, _lerp(WALL, METAL, 0.45))  # handle
         f.box(x - head / 2, y - 0.014, x + head / 2, y + 0.008,
-              _lerp(WALL, METAL, 0.72))  # head
+              _lerp(WALL, METAL, 0.72), tex="metal")  # head
         f.rim(x - head / 2, y - 0.014, x + head / 2, alpha=0.7)
 
     # A jar of screws. Glass gets the one real highlight in the frame.
     f.shadow(0.812, 0.712, 0.044)
     f.box(0.780, 0.582, 0.845, 0.706, _lerp(WALL, GLASS, 0.9))
     f.box(0.780, 0.648, 0.845, 0.706, _lerp(WALL, METAL_DARK, 0.7))
-    f.box(0.776, 0.572, 0.849, 0.590, _lerp(WALL, METAL, 0.6))
+    f.box(0.776, 0.572, 0.849, 0.590, _lerp(WALL, METAL, 0.6), tex="metal")
     f.line(0.791, 0.600, 0.791, 0.690, 0.0040, _lerp(GLASS, SALT, 0.55))
     f.rim(0.776, 0.572, 0.849)
 
@@ -298,7 +344,7 @@ def workshop(f: Frame, stage: int) -> None:
         x = 0.876 + (i % 2) * 0.052
         y = 0.672 - (i // 2) * 0.034
         f.shadow(x + 0.023, y + 0.034, 0.030, strength=0.35)
-        f.box(x, y, x + 0.046, y + 0.032, _lerp(WALL, RUST, 0.45 + 0.12 * (i % 3)))
+        f.box(x, y, x + 0.046, y + 0.032, _lerp(WALL, RUST, 0.45 + 0.12 * (i % 3)), tex="rust")
         f.rim(x, y, x + 0.046, colour=RUST)
 
     # Rationing dims the lamp as the world worsens — stage 3 is 「限電從一週一次變三次」.
